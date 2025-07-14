@@ -361,7 +361,7 @@ class HybridMusicRecommender:
         self.context_recommender = ContextAwareRecommender(self.df)
         
         print("Hybrid Music Recommender initialized successfully!")
-    
+    #Always 20, but can be adjusted /Roberto
     def get_comprehensive_recommendations(self, num_recommendations: int = 20) -> Dict:
         """Get recommendations from all engines"""
         recommendations = {}
