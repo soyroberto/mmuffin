@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 
 import argparse
-from recommendation_prototype import HybridMusicRecommender
+#from recommendation_prototype import HybridMusicRecommender
+from main import HybridMusicRecommender
 
 def main():
     parser = argparse.ArgumentParser(description='Music Recommendation System')
