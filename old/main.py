@@ -1,296 +1,118 @@
 #!/usr/bin/env python3
 """
-Music Recommendation System Prototype
-Based on 11 years of Spotify listening history
+Enhanced Secure Music Recommendation System
+New Features:
+- Artist tier selection (e.g., artists ranked 200-300)
+- Global data folder configuration
+- Improved performance for different artist ranges
+- Enhanced CLI with more options
 
-This prototype demonstrates the core components of a hybrid music recommendation system
-that combines temporal collaborative filtering, content-based similarity, and context-aware recommendations.
-
-""Fixes and Improvements: 15/07/25
-Fixed Music Recommendation System Prototype
-Addresses:
-1. Filtering out '(Blank)' fields
-2. Fixing the 19-artist limitation issue
-This fixed version ensures proper data cleaning and removes the artificial limitation
-on the number of recommendations returned.
-
+This version allows you to explore recommendations from different tiers of your
+listening history, making it faster to get recommendations from less-played artists.
 """
 
-import pandas as pd
-import numpy as np
-import json
 import os
-from datetime import datetime, timedelta
-from typing import Dict, List, Tuple, Optional
-import requests
-import time
-from sklearn.feature_extraction.text import TfidfVectorizer
-from sklearn.metrics.pairwise import cosine_similarity
-from sklearn.cluster import KMeans
-from sklearn.decomposition import NMF
-import warnings
-warnings.filterwarnings('ignore')
+import sys
+import json
+from pathlib import Path
+from typing import Optional, Dict, List, Tuple
+import argparse
 
-class SpotifyDataProcessor:
-    """Process raw Spotify listening history data with proper filtering"""
-    
-    def __init__(self, data_directory: str):
-        self.data_directory = data_directory
-        self.df = None
-        
-    def load_data(self) -> pd.DataFrame:
-        """Load all Spotify JSON files and combine into single DataFrame"""
-        dataframes = []
-        
-        for filename in os.listdir(self.data_directory):
-            if filename.endswith('.json') and 'Audio' in filename:
-                filepath = os.path.join(self.data_directory, filename)
-                try:
-                    with open(filepath, 'r', encoding='utf-8') as f:
-                        data = json.load(f)
-                        df_temp = pd.DataFrame(data)
-                        dataframes.append(df_temp)
-                        print(f"Loaded {len(df_temp)} records from {filename}")
-                except Exception as e:
-                    print(f"Error loading {filename}: {e}")
-        
-        if dataframes:
-            self.df = pd.concat(dataframes, ignore_index=True)
-            self._clean_data()
-            return self.df
-        else:
-            raise ValueError("No valid data files found")
-    
-    def _clean_data(self):
-        """Clean and preprocess the data with proper filtering"""
-        print("Starting data cleaning...")
-        initial_count = len(self.df)
-        
-        # Convert timestamp
-        self.df['ts'] = pd.to_datetime(self.df['ts'])
-        
-        # Clean artist and track names FIRST, before any other processing
-        self.df['artist'] = self.df['master_metadata_album_artist_name'].fillna('Unknown Artist')
-        self.df['track'] = self.df['master_metadata_track_name'].fillna('Unknown Track')
-        self.df['album'] = self.df['master_metadata_album_album_name'].fillna('Unknown Album')
-        
-        # CRITICAL FIX: Filter out '(Blank)' entries
-        print("Filtering out '(Blank)' entries...")
-        blank_filter = (
-            (self.df['artist'] != '(Blank)') & 
-            (self.df['track'] != '(Blank)') & 
-            (self.df['album'] != '(Blank)') &
-            (self.df['artist'] != '') &
-            (self.df['track'] != '') &
-            (self.df['artist'].notna()) &
-            (self.df['track'].notna())
-        )
-        
-        before_blank_filter = len(self.df)
-        self.df = self.df[blank_filter]
-        after_blank_filter = len(self.df)
-        print(f"Removed {before_blank_filter - after_blank_filter} '(Blank)' or empty entries")
-        
-        # Calculate engagement metrics
-        self.df['hours_played'] = self.df['ms_played'] / 3600000
-        self.df['minutes_played'] = self.df['ms_played'] / 60000
-        
-        # Extract temporal features
-        self.df['year'] = self.df['ts'].dt.year
-        self.df['month'] = self.df['ts'].dt.month
-        self.df['day_of_week'] = self.df['ts'].dt.dayofweek
-        self.df['hour'] = self.df['ts'].dt.hour
-        
-        # Calculate engagement score (0-1 based on listening completion)
-        # Assume average track length of 3.5 minutes for missing data
-        avg_track_length_ms = 3.5 * 60 * 1000
-        self.df['engagement_score'] = np.minimum(
-            self.df['ms_played'] / avg_track_length_ms, 1.0
-        )
-        
-        # Remove very short plays (likely skips) but keep reasonable threshold
-        before_duration_filter = len(self.df)
-        self.df = self.df[self.df['ms_played'] > 30000]  # At least 30 seconds
-        after_duration_filter = len(self.df)
-        print(f"Removed {before_duration_filter - after_duration_filter} very short plays")
-        
-        final_count = len(self.df)
-        print(f"Data cleaning complete: {initial_count} → {final_count} records ({final_count/initial_count*100:.1f}% retained)")
-        print(f"Date range: {self.df['ts'].min()} to {self.df['ts'].max()}")
-        print(f"Unique artists: {self.df['artist'].nunique()}")
-        print(f"Unique albums: {self.df['album'].nunique()}")
+# Import the secure configuration system
+from secrets_encryption_system import SecureConfigManager, SecureConfigLoader
 
-class LastFMAPI:
-    """Interface to Last.fm API for music metadata and similarity"""
+# Import the fixed recommendation system
+#from fixed_recommendation_prototype import HybridMusicRecommender, SpotifyDataProcessor, ContentBasedRecommender
+from recommendation_prototype import HybridMusicRecommender, SpotifyDataProcessor, ContentBasedRecommender
+
+class GlobalConfig:
+    """
+    Global configuration manager for the music recommendation system
+    Handles data folder paths and other global settings
+    """
     
-    def __init__(self, api_key: str):
-        self.api_key = api_key
-        self.base_url = "http://ws.audioscrobbler.com/2.0/"
-        self.session = requests.Session()
-        self.cache = {}
-        
-    def get_similar_artists(self, artist_name: str, limit: int = 50) -> List[Dict]:
-        """Get similar artists from Last.fm with increased limit"""
-        cache_key = f"similar_{artist_name}_{limit}"
-        
-        if cache_key in self.cache:
-            return self.cache[cache_key]
-        
-        # Rate limiting
-        time.sleep(0.2)
-        
-        params = {
-            'method': 'artist.getsimilar',
-            'artist': artist_name,
-            'api_key': self.api_key,
-            'format': 'json',
-            'limit': min(limit, 100)  # Last.fm max is 100
+    def __init__(self, config_file: str = "config/global_config.json"):
+        self.config_file = Path(config_file)
+        self.config_file.parent.mkdir(exist_ok=True)
+        self.config = self._load_config()
+    
+    def _load_config(self) -> Dict:
+        """Load global configuration from file"""
+        default_config = {
+            "data_folder": "data/spotify",
+            "cache_folder": "cache",
+            "output_folder": "output",
+            "logs_folder": "logs",
+            "default_artist_tier_start": 1,
+            "default_artist_tier_end": 50,
+            "max_api_calls_per_session": 1000,
+            "enable_caching": True,
+            "cache_expiry_hours": 24
         }
         
-        try:
-            response = self.session.get(self.base_url, params=params, timeout=10)
-            response.raise_for_status()
-            data = response.json()
-            
-            if 'similarartists' in data and 'artist' in data['similarartists']:
-                similar_artists = data['similarartists']['artist']
-                # Filter out any '(Blank)' entries from API response
-                filtered_artists = [
-                    artist for artist in similar_artists 
-                    if isinstance(artist, dict) and 
-                    artist.get('name', '') != '(Blank)' and 
-                    artist.get('name', '') != '' and
-                    artist.get('name') is not None
-                ]
-                self.cache[cache_key] = filtered_artists
-                return filtered_artists
-            return []
-        except Exception as e:
-            print(f"Error fetching similar artists for {artist_name}: {e}")
-            return []
+        if self.config_file.exists():
+            try:
+                with open(self.config_file, 'r') as f:
+                    loaded_config = json.load(f)
+                    # Merge with defaults
+                    default_config.update(loaded_config)
+            except Exception as e:
+                print(f"⚠️  Warning: Could not load global config: {e}")
+                print("Using default configuration")
+        
+        return default_config
     
-    def get_artist_info(self, artist_name: str) -> Dict:
-        """Get artist information from Last.fm"""
-        cache_key = f"info_{artist_name}"
-        
-        if cache_key in self.cache:
-            return self.cache[cache_key]
-        
-        # Rate limiting
-        time.sleep(0.2)
-        
-        params = {
-            'method': 'artist.getinfo',
-            'artist': artist_name,
-            'api_key': self.api_key,
-            'format': 'json'
+    def save_config(self):
+        """Save current configuration to file"""
+        try:
+            with open(self.config_file, 'w') as f:
+                json.dump(self.config, f, indent=2)
+            print(f"✅ Global configuration saved to {self.config_file}")
+        except Exception as e:
+            print(f"❌ Error saving global config: {e}")
+    
+    def get(self, key: str, default=None):
+        """Get configuration value"""
+        return self.config.get(key, default)
+    
+    def set(self, key: str, value):
+        """Set configuration value"""
+        self.config[key] = value
+    
+    def get_data_folder(self) -> str:
+        """Get the configured data folder path"""
+        return self.config["data_folder"]
+    
+    def set_data_folder(self, path: str):
+        """Set the data folder path"""
+        self.config["data_folder"] = path
+        self.save_config()
+    
+    def get_all_folders(self) -> Dict[str, str]:
+        """Get all configured folder paths"""
+        return {
+            "data": self.config["data_folder"],
+            "cache": self.config["cache_folder"],
+            "output": self.config["output_folder"],
+            "logs": self.config["logs_folder"]
         }
-        
-        try:
-            response = self.session.get(self.base_url, params=params, timeout=10)
-            response.raise_for_status()
-            data = response.json()
-            
-            if 'artist' in data:
-                artist_info = data['artist']
-                self.cache[cache_key] = artist_info
-                return artist_info
-            return {}
-        except Exception as e:
-            print(f"Error fetching artist info for {artist_name}: {e}")
-            return {}
 
-class TemporalCollaborativeFilter:
-    """Time-aware collaborative filtering for taste evolution"""
+class EnhancedContentBasedRecommender(ContentBasedRecommender):
+    """
+    Enhanced content-based recommender with artist tier selection
+    """
     
-    def __init__(self, df: pd.DataFrame):
-        self.df = df
-        self.time_periods = self._create_time_periods()
-        self.artist_embeddings = {}
-        
-    def _create_time_periods(self) -> List[Tuple[str, pd.DataFrame]]:
-        """Split data into time periods for temporal analysis"""
-        periods = []
-        
-        # Yearly periods
-        for year in sorted(self.df['year'].unique()):
-            year_data = self.df[self.df['year'] == year]
-            if len(year_data) > 100:  # Minimum threshold
-                periods.append((f"Year_{year}", year_data))
-        
-        # Recent periods (more granular)
-        recent_data = self.df[self.df['year'] >= 2020]
-        if len(recent_data) > 500:
-            for year in [2020, 2021, 2022, 2023]:
-                year_data = recent_data[recent_data['year'] == year]
-                if len(year_data) > 100:
-                    periods.append((f"Recent_{year}", year_data))
-        
-        return periods
+    def __init__(self, df, lastfm_api=None, artist_tier_start=1, artist_tier_end=50):
+        super().__init__(df, lastfm_api)
+        self.artist_tier_start = artist_tier_start
+        self.artist_tier_end = artist_tier_end
+        self._rebuild_user_profile_with_tiers()
     
-    def train_period_embeddings(self):
-        """Train embeddings for each time period"""
-        for period_name, period_data in self.time_periods:
-            # Create artist-engagement matrix for this period
-            artist_engagement = (period_data.groupby('artist')['engagement_score']
-                               .agg(['sum', 'mean', 'count'])
-                               .reset_index())
-            
-            # Calculate weighted engagement score
-            artist_engagement['weighted_score'] = (
-                artist_engagement['sum'] * 0.5 +
-                artist_engagement['mean'] * 0.3 +
-                np.log1p(artist_engagement['count']) * 0.2
-            )
-            
-            self.artist_embeddings[period_name] = artist_engagement
-            print(f"Processed {len(artist_engagement)} artists for {period_name}")
-    
-    def get_taste_evolution(self) -> Dict:
-        """Analyze how musical taste evolves over time"""
-        evolution = {}
+    def _rebuild_user_profile_with_tiers(self):
+        """Rebuild user profile with specified artist tiers"""
+        print(f"🎯 Building user profile with artist tiers {self.artist_tier_start}-{self.artist_tier_end}")
         
-        for period_name, embeddings in self.artist_embeddings.items():
-            top_artists = embeddings.nlargest(10, 'weighted_score')['artist'].tolist()
-            evolution[period_name] = top_artists
-        
-        return evolution
-    
-    def predict_future_preferences(self, recent_weight: float = 0.7) -> List[str]:
-        """Predict future preferences based on taste evolution"""
-        if not self.artist_embeddings:
-            self.train_period_embeddings()
-        
-        # Weight recent periods more heavily
-        weighted_scores = {}
-        
-        for period_name, embeddings in self.artist_embeddings.items():
-            weight = recent_weight if 'Recent' in period_name else (1 - recent_weight)
-            
-            for _, row in embeddings.iterrows():
-                artist = row['artist']
-                score = row['weighted_score'] * weight
-                
-                if artist in weighted_scores:
-                    weighted_scores[artist] += score
-                else:
-                    weighted_scores[artist] = score
-        
-        # Return top predicted artists (INCREASED LIMIT)
-        sorted_artists = sorted(weighted_scores.items(), key=lambda x: x[1], reverse=True)
-        return [artist for artist, score in sorted_artists[:200]]  # Increased from 50 to 200
-
-class ContentBasedRecommender:
-    """Content-based recommendations using artist similarity"""
-    
-    def __init__(self, df: pd.DataFrame, lastfm_api: Optional[LastFMAPI] = None):
-        self.df = df
-        self.lastfm_api = lastfm_api
-        self.user_profile = self._build_user_profile()
-        
-    def _build_user_profile(self) -> Dict:
-        """Build user profile from listening history"""
-        # Calculate artist preferences
+        # Calculate artist preferences (same as before)
         artist_stats = (self.df.groupby('artist')
                        .agg({
                            'engagement_score': ['sum', 'mean', 'count'],
@@ -309,152 +131,165 @@ class ContentBasedRecommender:
             np.log1p(artist_stats['total_hours']) * 0.1
         )
         
-        # Get top artists (INCREASED NUMBER)
-        top_artists = artist_stats.nlargest(50, 'preference_score')  # Increased from 20 to 50
+        # Sort by preference score
+        artist_stats = artist_stats.sort_values('preference_score', ascending=False).reset_index(drop=True)
         
-        return {
-            'top_artists': top_artists['artist'].tolist(),
-            'artist_scores': dict(zip(artist_stats['artist'], artist_stats['preference_score']))
+        # Add ranking
+        artist_stats['rank'] = range(1, len(artist_stats) + 1)
+        
+        # Select artists within the specified tier range
+        tier_mask = (
+            (artist_stats['rank'] >= self.artist_tier_start) & 
+            (artist_stats['rank'] <= self.artist_tier_end)
+        )
+        tier_artists = artist_stats[tier_mask]
+        
+        print(f"📊 Total artists in your library: {len(artist_stats)}")
+        print(f"🎯 Artists in tier {self.artist_tier_start}-{self.artist_tier_end}: {len(tier_artists)}")
+        
+        if len(tier_artists) == 0:
+            print(f"⚠️  Warning: No artists found in tier {self.artist_tier_start}-{self.artist_tier_end}")
+            print(f"Available range: 1-{len(artist_stats)}")
+            # Fall back to top artists
+            tier_artists = artist_stats.head(min(50, len(artist_stats)))
+            print(f"Falling back to top {len(tier_artists)} artists")
+        
+        # Update user profile with tier-specific artists
+        self.user_profile = {
+            'top_artists': tier_artists['artist'].tolist(),
+            'artist_scores': dict(zip(tier_artists['artist'], tier_artists['preference_score'])),
+            'tier_info': {
+                'start': self.artist_tier_start,
+                'end': self.artist_tier_end,
+                'total_artists': len(artist_stats),
+                'tier_artists': len(tier_artists)
+            }
         }
+        
+        # Show some examples of tier artists
+        print(f"🎵 Sample artists in this tier:")
+        for i, (_, row) in enumerate(tier_artists.head(5).iterrows()):
+            print(f"   #{row['rank']}: {row['artist']} ({row['total_hours']:.1f}h, score: {row['preference_score']:.2f})")
     
-    def get_similar_artists_recommendations(self, num_recommendations: int = 50) -> List[Dict]:
-        """Get artist recommendations based on similarity to user's favorites"""
-        if not self.lastfm_api:
-            print("Last.fm API not available for similarity recommendations")
-            return []
-        
-        recommendations = {}
-        processed_artists = 0
-        
-        # CRITICAL FIX: Process more seed artists and get more similar artists per seed
-        seed_artists = self.user_profile['top_artists'][:25]  # Increased from 10 to 25
-        print(f"Processing {len(seed_artists)} seed artists for recommendations...")
-        
-        for artist in seed_artists:
-            print(f"Getting similar artists for: {artist}")
-            # INCREASED LIMIT: Get more similar artists per seed
-            similar_artists = self.lastfm_api.get_similar_artists(artist, limit=50)  # Increased from 10 to 50
-            
-            for similar_artist in similar_artists:
-                if isinstance(similar_artist, dict) and 'name' in similar_artist:
-                    similar_name = similar_artist['name']
-                    
-                    # Skip if '(Blank)' or empty
-                    if similar_name in ['(Blank)', '', None]:
-                        continue
-                        
-                    similarity_score = float(similar_artist.get('match', 0))
-                    
-                    # Skip if already in user's listening history
-                    if similar_name in self.user_profile['artist_scores']:
-                        continue
-                    
-                    # Weight by user's preference for the seed artist
-                    seed_preference = self.user_profile['artist_scores'].get(artist, 0)
-                    weighted_score = similarity_score * seed_preference
-                    
-                    if similar_name in recommendations:
-                        recommendations[similar_name] += weighted_score
-                    else:
-                        recommendations[similar_name] = weighted_score
-            
-            processed_artists += 1
-            # Rate limiting
-            time.sleep(0.25)
-        
-        print(f"Found {len(recommendations)} unique recommendations from {processed_artists} seed artists")
-        
-        # Sort and return top recommendations (REMOVED ARTIFICIAL LIMIT)
-        sorted_recs = sorted(recommendations.items(), key=lambda x: x[1], reverse=True)
-        
-        result = []
-        for artist_name, score in sorted_recs[:num_recommendations]:  # Now respects the requested number
-            result.append({
-                'artist': artist_name,
-                'recommendation_score': score,
-                'type': 'similar_artist'
-            })
-        
-        print(f"Returning {len(result)} recommendations (requested: {num_recommendations})")
-        return result
+    def get_tier_info(self) -> Dict:
+        """Get information about the current artist tier"""
+        return self.user_profile.get('tier_info', {})
 
-class ContextAwareRecommender:
-    """Context-aware recommendations based on listening patterns"""
+class EnhancedSecureMusicRecommender:
+    """
+    Enhanced secure wrapper for the music recommendation system
+    Includes artist tier selection and global configuration
+    """
     
-    def __init__(self, df: pd.DataFrame):
-        self.df = df
-        self.context_profiles = self._build_context_profiles()
-    
-    def _build_context_profiles(self) -> Dict:
-        """Build context-specific listening profiles"""
-        profiles = {}
+    def __init__(self, config_method: str = "env", artist_tier_start: int = 1, 
+                 artist_tier_end: int = 50, data_folder: Optional[str] = None):
         
-        # Time-of-day profiles
-        for hour_range, label in [
-            (range(6, 12), 'morning'),
-            (range(12, 18), 'afternoon'),
-            (range(18, 23), 'evening'),
-            (list(range(23, 24)) + list(range(0, 6)), 'night')
-        ]:
-            hour_data = self.df[self.df['hour'].isin(hour_range)]
-            if len(hour_data) > 50:
-                top_artists = (hour_data.groupby('artist')['engagement_score']
-                             .agg(['sum', 'count'])
-                             .reset_index())
-                top_artists['score'] = top_artists['sum'] * np.log1p(top_artists['count'])
-                profiles[f'time_{label}'] = top_artists.nlargest(20, 'score')['artist'].tolist()  # Increased from 10 to 20
+        # Load global configuration
+        self.global_config = GlobalConfig()
         
-        # Day-of-week profiles
-        for dow, label in [(0, 'monday'), (5, 'saturday'), (6, 'sunday')]:
-            dow_data = self.df[self.df['day_of_week'] == dow]
-            if len(dow_data) > 50:
-                top_artists = (dow_data.groupby('artist')['engagement_score']
-                             .agg(['sum', 'count'])
-                             .reset_index())
-                top_artists['score'] = top_artists['sum'] * np.log1p(top_artists['count'])
-                profiles[f'day_{label}'] = top_artists.nlargest(20, 'score')['artist'].tolist()  # Increased from 10 to 20
-        
-        return profiles
-    
-    def get_context_recommendations(self, context: str) -> List[str]:
-        """Get recommendations for specific context"""
-        if context in self.context_profiles:
-            return self.context_profiles[context]
+        # Set data folder (parameter overrides global config)
+        if data_folder:
+            self.data_directory = data_folder
+            self.global_config.set_data_folder(data_folder)
         else:
-            return []
-
-class HybridMusicRecommender:
-    """Main recommendation system combining multiple approaches"""
+            self.data_directory = self.global_config.get_data_folder()
+        
+        self.config_method = config_method
+        self.artist_tier_start = artist_tier_start
+        self.artist_tier_end = artist_tier_end
+        
+        # Initialize configuration managers
+        self.config_manager = SecureConfigManager()
+        self.config_loader = SecureConfigLoader(self.config_manager)
+        self.recommender = None
+        
+        # Load configuration
+        self.secrets = self._load_secure_config()
+        
+        if not self.secrets:
+            raise ValueError("Failed to load secure configuration")
+        
+        # Initialize the recommendation system
+        self._initialize_recommender()
     
-    def __init__(self, data_directory: str, lastfm_api_key: Optional[str] = None):
-        # Initialize components
-        self.data_processor = SpotifyDataProcessor(data_directory)
-        self.df = self.data_processor.load_data()
+    def _load_secure_config(self) -> Dict[str, str]:
+        """Load secure configuration using specified method"""
+        print(f"🔐 Loading secure configuration using method: {self.config_method}")
         
-        self.lastfm_api = LastFMAPI(lastfm_api_key) if lastfm_api_key else None
-        
-        self.temporal_cf = TemporalCollaborativeFilter(self.df)
-        self.content_recommender = ContentBasedRecommender(self.df, self.lastfm_api)
-        self.context_recommender = ContextAwareRecommender(self.df)
-        
-        print("Hybrid Music Recommender initialized successfully!")
+        try:
+            secrets = self.config_loader.load_secrets(self.config_method)
+            
+            if not secrets:
+                print("❌ No secrets loaded. Trying alternative methods...")
+                
+                # Try alternative methods
+                for alt_method in ["env", "encrypted", "prompt"]:
+                    if alt_method != self.config_method:
+                        print(f"Trying {alt_method} method...")
+                        secrets = self.config_loader.load_secrets(alt_method)
+                        if secrets:
+                            print(f"✅ Successfully loaded using {alt_method} method")
+                            break
+            
+            return secrets
+            
+        except Exception as e:
+            print(f"❌ Error loading configuration: {e}")
+            return {}
     
-    def get_comprehensive_recommendations(self, num_recommendations: int = 20) -> Dict:
-        """Get recommendations from all engines with proper limits"""
+    def _initialize_recommender(self):
+        """Initialize the music recommendation system with enhanced features"""
+        lastfm_api_key = self.secrets.get('LASTFM_API_KEY')
+        
+        if not lastfm_api_key:
+            raise ValueError("Last.fm API key not found in configuration")
+        
+        print(f"🎵 Initializing enhanced music recommendation system...")
+        print(f"📁 Data folder: {self.data_directory}")
+        print(f"🎯 Artist tier: {self.artist_tier_start}-{self.artist_tier_end}")
+        
+        # Initialize data processor
+        data_processor = SpotifyDataProcessor(self.data_directory)
+        df = data_processor.load_data()
+        
+        # Initialize enhanced content recommender with tier selection
+        from fixed_recommendation_prototype import LastFMAPI, TemporalCollaborativeFilter, ContextAwareRecommender
+        
+        lastfm_api = LastFMAPI(lastfm_api_key)
+        
+        self.enhanced_content_recommender = EnhancedContentBasedRecommender(
+            df, lastfm_api, self.artist_tier_start, self.artist_tier_end
+        )
+        
+        # Initialize other components
+        self.temporal_cf = TemporalCollaborativeFilter(df)
+        self.context_recommender = ContextAwareRecommender(df)
+        
+        # Store dataframe for analysis
+        self.df = df
+        
+        print("✅ Enhanced secure music recommender initialized successfully")
+    
+    def get_recommendations(self, num_recommendations: int = 20) -> Dict:
+        """Get music recommendations with tier-specific seed artists"""
         recommendations = {}
         
-        # Temporal collaborative filtering
-        print("Generating temporal recommendations...")
+        # Get tier info
+        tier_info = self.enhanced_content_recommender.get_tier_info()
+        recommendations['tier_info'] = tier_info
+        
+        # Temporal collaborative filtering (uses all data)
+        print("🕒 Generating temporal recommendations...")
         temporal_recs = self.temporal_cf.predict_future_preferences()
         recommendations['temporal'] = temporal_recs[:num_recommendations]
         
-        # Content-based recommendations (FIXED: Now respects num_recommendations)
-        print("Generating content-based recommendations...")
-        content_recs = self.content_recommender.get_similar_artists_recommendations(num_recommendations)
+        # Enhanced content-based recommendations (uses tier-specific artists)
+        print(f"🎯 Generating content-based recommendations from tier {self.artist_tier_start}-{self.artist_tier_end}...")
+        content_recs = self.enhanced_content_recommender.get_similar_artists_recommendations(num_recommendations)
         recommendations['content_based'] = content_recs
         
         # Context-aware recommendations
-        print("Generating context-aware recommendations...")
+        print("📅 Generating context-aware recommendations...")
         context_recs = {}
         for context in ['time_morning', 'time_evening', 'day_saturday']:
             context_recs[context] = self.context_recommender.get_context_recommendations(context)
@@ -462,8 +297,8 @@ class HybridMusicRecommender:
         
         return recommendations
     
-    def analyze_listening_patterns(self) -> Dict:
-        """Analyze user's listening patterns and preferences"""
+    def analyze_patterns(self) -> Dict:
+        """Analyze listening patterns with tier information"""
         analysis = {}
         
         # Basic statistics
@@ -479,39 +314,297 @@ class HybridMusicRecommender:
         # Top artists and albums
         top_artists = (self.df.groupby('artist')['hours_played']
                       .sum()
-                      .nlargest(10)
+                      .nlargest(20)
                       .to_dict())
         analysis['top_artists'] = top_artists
         
-        top_albums = (self.df.groupby(['artist', 'album'])['hours_played']
-                     .sum()
-                     .nlargest(10)
-                     .to_dict())
-        analysis['top_albums'] = {f"{artist} - {album}": hours 
-                                 for (artist, album), hours in top_albums.items()}
+        # Tier-specific analysis
+        tier_info = self.enhanced_content_recommender.get_tier_info()
+        analysis['current_tier'] = tier_info
         
-        # Temporal patterns
-        hourly_listening = self.df.groupby('hour')['hours_played'].sum().to_dict()
-        analysis['hourly_patterns'] = hourly_listening
+        # Artist distribution by tiers
+        artist_stats = (self.df.groupby('artist')['hours_played']
+                       .sum()
+                       .sort_values(ascending=False)
+                       .reset_index())
+        artist_stats['rank'] = range(1, len(artist_stats) + 1)
         
-        # Taste evolution
-        taste_evolution = self.temporal_cf.get_taste_evolution()
-        analysis['taste_evolution'] = taste_evolution
+        # Create tier distribution
+        tier_ranges = [
+            (1, 10, "Top 10"),
+            (11, 50, "Top 11-50"),
+            (51, 100, "Top 51-100"),
+            (101, 200, "Top 101-200"),
+            (201, 500, "Top 201-500"),
+            (501, 1000, "Top 501-1000"),
+            (1001, len(artist_stats), "Beyond 1000")
+        ]
+        
+        tier_distribution = {}
+        for start, end, label in tier_ranges:
+            tier_artists = artist_stats[
+                (artist_stats['rank'] >= start) & 
+                (artist_stats['rank'] <= min(end, len(artist_stats)))
+            ]
+            if len(tier_artists) > 0:
+                tier_distribution[label] = {
+                    'count': len(tier_artists),
+                    'total_hours': tier_artists['hours_played'].sum(),
+                    'avg_hours': tier_artists['hours_played'].mean()
+                }
+        
+        analysis['tier_distribution'] = tier_distribution
         
         return analysis
+    
+    def get_config_info(self) -> Dict[str, str]:
+        """Get configuration information including global settings"""
+        info = {
+            "config_method": self.config_method,
+            "secrets_loaded": len(self.secrets),
+            "lastfm_api_configured": bool(self.secrets.get('LASTFM_API_KEY')),
+            "musicbrainz_configured": bool(self.secrets.get('MUSICBRAINZ_USER_AGENT')),
+            "data_folder": self.data_directory,
+            "artist_tier_start": self.artist_tier_start,
+            "artist_tier_end": self.artist_tier_end
+        }
+        
+        # Add global config info
+        global_folders = self.global_config.get_all_folders()
+        info.update({f"global_{k}_folder": v for k, v in global_folders.items()})
+        
+        return info
+    
+    def set_global_data_folder(self, path: str):
+        """Set the global data folder configuration"""
+        self.global_config.set_data_folder(path)
+        print(f"✅ Global data folder set to: {path}")
 
-# Example usage and testing
+def main():
+    """Enhanced CLI for music recommendations with tier selection"""
+    parser = argparse.ArgumentParser(
+        description='Enhanced Secure Music Recommendation System with Artist Tier Selection',
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  # Get recommendations from your top 50 artists
+  python enhanced_secure_music_recommender.py --num-recs 30
+
+  # Get recommendations from artists ranked 200-300 in your library
+  python enhanced_secure_music_recommender.py --artist-tier-start 200 --artist-tier-end 300 --num-recs 25
+
+  # Use a different data folder
+  python enhanced_secure_music_recommender.py --data-folder /path/to/spotify/data --num-recs 20
+
+  # Set global data folder for all future runs
+  python enhanced_secure_music_recommender.py --set-global-data-folder /path/to/spotify/data
+
+  # Analyze listening patterns with tier distribution
+  python enhanced_secure_music_recommender.py --analyze-only --verbose
+        """
+    )
+    
+    # Configuration options
+    parser.add_argument('--data-folder', help='Spotify data directory (overrides global config)')
+    parser.add_argument('--config-method', choices=['env', 'encrypted', 'prompt'], 
+                       default='env', help='Configuration loading method')
+    
+    # Artist tier selection
+    parser.add_argument('--artist-tier-start', type=int, default=1, 
+                       help='Starting rank of artists to use as seeds (default: 1)')
+    parser.add_argument('--artist-tier-end', type=int, default=50,
+                       help='Ending rank of artists to use as seeds (default: 50)')
+    
+    # Recommendation options
+    parser.add_argument('--num-recs', type=int, default=20, help='Number of recommendations')
+    parser.add_argument('--analyze-only', action='store_true', help='Only analyze patterns')
+    parser.add_argument('--verbose', action='store_true', help='Verbose output')
+    
+    # Global configuration
+    parser.add_argument('--set-global-data-folder', help='Set global data folder and exit')
+    parser.add_argument('--show-global-config', action='store_true', help='Show global configuration')
+    
+    # Setup options
+    parser.add_argument('--setup-config', action='store_true', help='Setup secure configuration')
+    parser.add_argument('--test-config', action='store_true', help='Test configuration loading')
+    
+    args = parser.parse_args()
+    
+    # Handle global configuration commands
+    if args.set_global_data_folder:
+        global_config = GlobalConfig()
+        global_config.set_data_folder(args.set_global_data_folder)
+        print(f"✅ Global data folder set to: {args.set_global_data_folder}")
+        return
+    
+    if args.show_global_config:
+        global_config = GlobalConfig()
+        print("🌍 Global Configuration:")
+        for key, value in global_config.config.items():
+            print(f"   {key}: {value}")
+        return
+    
+    # Handle setup and test commands
+    if args.setup_config:
+        from secrets_encryption_system import setup_secure_config
+        setup_secure_config()
+        return
+    
+    if args.test_config:
+        from secrets_encryption_system import test_configuration
+        test_configuration()
+        return
+    
+    # Validate artist tier parameters
+    if args.artist_tier_start < 1:
+        print("❌ Error: artist-tier-start must be >= 1")
+        sys.exit(1)
+    
+    if args.artist_tier_end < args.artist_tier_start:
+        print("❌ Error: artist-tier-end must be >= artist-tier-start")
+        sys.exit(1)
+    
+    # Determine data directory
+    data_dir = args.data_folder
+    if not data_dir:
+        global_config = GlobalConfig()
+        data_dir = global_config.get_data_folder()
+    
+    # Validate data directory
+    if not os.path.exists(data_dir):
+        print(f"❌ Error: Data directory '{data_dir}' does not exist")
+        print("Please ensure your Spotify JSON files are in the correct directory")
+        print("Or use --set-global-data-folder to configure the path")
+        sys.exit(1)
+    
+    # Check for JSON files
+    json_files = [f for f in os.listdir(data_dir) if f.endswith('.json') and 'Audio' in f]
+    if not json_files:
+        print(f"❌ Error: No Spotify JSON files found in '{data_dir}'")
+        print("Expected files like: Audio_2012.json, Audio_2013.json, etc.")
+        sys.exit(1)
+    
+    if args.verbose:
+        print(f"📁 Found {len(json_files)} Spotify data files in {data_dir}:")
+        for file in json_files:
+            print(f"   - {file}")
+    
+    try:
+        # Initialize enhanced secure recommender
+        print("🔐 Initializing enhanced secure music recommendation system...")
+        secure_recommender = EnhancedSecureMusicRecommender(
+            config_method=args.config_method,
+            artist_tier_start=args.artist_tier_start,
+            artist_tier_end=args.artist_tier_end,
+            data_folder=data_dir
+        )
+        
+        if args.verbose:
+            config_info = secure_recommender.get_config_info()
+            print(f"\n📋 Configuration Info:")
+            for key, value in config_info.items():
+                print(f"   {key}: {value}")
+        
+        if args.analyze_only:
+            # Analyze patterns only
+            print("\n📊 Analyzing listening patterns...")
+            analysis = secure_recommender.analyze_patterns()
+            
+            print(f"\n🎵 Listening Analysis:")
+            print(f"Total plays: {analysis['total_plays']:,}")
+            print(f"Total hours: {analysis['total_hours']:.1f}")
+            print(f"Unique artists: {analysis['unique_artists']:,}")
+            print(f"Unique albums: {analysis['unique_albums']:,}")
+            print(f"Date range: {analysis['date_range']['start']} to {analysis['date_range']['end']}")
+            
+            # Show current tier info
+            tier_info = analysis.get('current_tier', {})
+            if tier_info:
+                print(f"\n🎯 Current Artist Tier:")
+                print(f"Tier range: {tier_info['start']}-{tier_info['end']}")
+                print(f"Artists in tier: {tier_info['tier_artists']}")
+                print(f"Total artists: {tier_info['total_artists']}")
+            
+            # Show tier distribution
+            if args.verbose and 'tier_distribution' in analysis:
+                print(f"\n📊 Artist Tier Distribution:")
+                for tier_name, tier_data in analysis['tier_distribution'].items():
+                    print(f"   {tier_name}: {tier_data['count']} artists, {tier_data['total_hours']:.1f}h total")
+            
+            print(f"\n🏆 Top 10 Artists by Hours:")
+            for i, (artist, hours) in enumerate(list(analysis['top_artists'].items())[:10], 1):
+                print(f"{i:2d}. {artist} ({hours:.1f} hours)")
+        
+        else:
+            # Generate recommendations
+            print(f"\n🎵 Generating {args.num_recs} recommendations from artist tier {args.artist_tier_start}-{args.artist_tier_end}...")
+            print("This may take a few minutes due to API calls...")
+            
+            recommendations = secure_recommender.get_recommendations(args.num_recs)
+            
+            # Show tier info
+            tier_info = recommendations.get('tier_info', {})
+            if tier_info:
+                print(f"\n🎯 Recommendation Source:")
+                print(f"Artist tier: {tier_info['start']}-{tier_info['end']}")
+                print(f"Seed artists: {tier_info['tier_artists']} out of {tier_info['total_artists']} total")
+            
+            # Display content-based recommendations
+            content_recs = recommendations.get('content_based', [])
+            
+            if not content_recs:
+                print("❌ No recommendations generated. This might be due to:")
+                print("   - API rate limiting")
+                print("   - No similar artists found for the selected tier")
+                print("   - Network connectivity issues")
+                print("   - Try a different artist tier range")
+                return
+            
+            print(f"\n🎵 Top {args.num_recs} Artist Recommendations:")
+            displayed_count = min(len(content_recs), args.num_recs)
+            
+            for i, rec in enumerate(content_recs[:args.num_recs], 1):
+                artist_name = rec.get('artist', 'Unknown Artist')
+                score = rec.get('recommendation_score', 0)
+                print(f"{i:2d}. {artist_name} (score: {score:.3f})")
+            
+            print(f"\n✅ Displayed {displayed_count} recommendations (requested: {args.num_recs})")
+            
+            if args.verbose:
+                if len(content_recs) < args.num_recs:
+                    print(f"\n⚠️  Note: Only {len(content_recs)} unique recommendations found.")
+                    print("This could be due to:")
+                    print("   - Limited similar artists for the selected tier")
+                    print("   - API response limitations")
+                    print("   - Try expanding the tier range")
+                
+                # Show temporal recommendations
+                temporal_recs = recommendations.get('temporal', [])
+                if temporal_recs:
+                    print(f"\n🕒 Temporal Predictions (based on taste evolution):")
+                    for i, artist in enumerate(temporal_recs[:10], 1):
+                        print(f"{i:2d}. {artist}")
+    
+    except KeyboardInterrupt:
+        print("\n\n⏹️  Operation cancelled by user")
+        sys.exit(0)
+    except Exception as e:
+        print(f"\n❌ Error: {e}")
+        if args.verbose:
+            import traceback
+            traceback.print_exc()
+        
+        print("\n🔧 Troubleshooting suggestions:")
+        print("1. Run with --setup-config to configure secrets")
+        print("2. Run with --test-config to test configuration")
+        print("3. Check your API keys and network connectivity")
+        print("4. Try a different artist tier range")
+        print("5. Use --verbose for detailed error information")
+        
+        sys.exit(1)
+
 if __name__ == "__main__":
-    print("Fixed Music Recommendation System Prototype")
-    print("==========================================")
-    print("Fixes applied:")
-    print("1. ✅ Filters out '(Blank)' entries in data cleaning")
-    print("2. ✅ Removes 19-artist limitation")
-    print("3. ✅ Increased API limits and seed artists")
-    print("4. ✅ Improved recommendation generation")
-    print("\nTo use this system:")
-    print("1. Place your Spotify data JSON files in a directory")
-    print("2. Get a Last.fm API key")
-    print("3. Initialize the HybridMusicRecommender class")
-    print("4. Call get_comprehensive_recommendations() for results")
+    # Import numpy here to avoid issues with the enhanced recommender
+    import numpy as np
+    main()
 
