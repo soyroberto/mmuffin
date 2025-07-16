@@ -300,7 +300,7 @@ def verify_setup():
     required_files = [
         "secrets_encryption_system.py",
         "secure_music_recommender.py",
-        "fixed_recommendation_prototype.py"
+        "recommendation_prototype.py"
     ]
     
     missing_files = []
