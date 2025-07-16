@@ -22,7 +22,7 @@ import argparse
 from secrets_encryption_system import SecureConfigManager, SecureConfigLoader
 
 # Import the fixed recommendation system
-from fixed_recommendation_prototype import HybridMusicRecommender, SpotifyDataProcessor, ContentBasedRecommender
+from recommendation_prototype import HybridMusicRecommender, SpotifyDataProcessor, ContentBasedRecommender
 
 class GlobalConfig:
     """
