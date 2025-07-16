@@ -67,13 +67,14 @@ class SpotifyDataProcessor:
         self.df['track'] = self.df['master_metadata_track_name'].fillna('Unknown Track')
         self.df['album'] = self.df['master_metadata_album_album_name'].fillna('Unknown Album')
         
-        # CRITICAL FIX: Filter out '(Blank)' entries
+        # CRITICAL FIX: Filter out '(Blank)' and Unknown Artist entries
         print("Filtering out '(Blank)' entries...")
         blank_filter = (
             (self.df['artist'] != '(Blank)') & 
             (self.df['track'] != '(Blank)') & 
             (self.df['album'] != '(Blank)') &
             (self.df['artist'] != '') &
+            (self.df['artist'] != 'Unknown Artist') &
             (self.df['track'] != '') &
             (self.df['artist'].notna()) &
             (self.df['track'].notna())
