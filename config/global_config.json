@@ -1,0 +1,11 @@
+{
+  "data_folder": "data/spotify",
+  "cache_folder": "cache",
+  "output_folder": "output",
+  "logs_folder": "logs",
+  "default_artist_tier_start": 1,
+  "default_artist_tier_end": 50,
+  "max_api_calls_per_session": 1000,
+  "enable_caching": true,
+  "cache_expiry_hours": 24
+}

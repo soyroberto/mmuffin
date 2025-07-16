@@ -1,0 +1,49 @@
+# Music Recommendation System - Security Files
+# DO NOT COMMIT THESE FILES TO VERSION CONTROL
+#secret file
+config.py
+
+# Environment files
+.env
+config/.env
+
+# Encryption keys
+config/key.key
+config/salt.key
+
+# Encrypted secrets (optional - you may want to commit this)
+# config/secrets.enc
+
+# Cache and temporary files
+cache/
+*.pyc
+__pycache__/
+.DS_Store
+# Music Recommendation System - Security Files
+# DO NOT COMMIT THESE FILES TO VERSION CONTROL
+
+# Environment files
+.env
+config/.env
+
+# Encryption keys
+config/key.key
+config/salt.key
+
+# Encrypted secrets (optional - you may want to commit this)
+# config/secrets.enc
+
+# Cache and temporary files
+cache/
+*.pyc
+__pycache__/
+.DS_Store
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS files
+Thumbs.db

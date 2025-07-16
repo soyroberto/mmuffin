@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
 """
-Music Recommendation System Prototype
-Based on 11 years of Spotify listening history
+Fixed Music Recommendation System Prototype
+Addresses:
+1. Filtering out '(Blank)' fields
+2. Fixing the 19-artist limitation issue
 
-This prototype demonstrates the core components of a hybrid music recommendation system
-that combines temporal collaborative filtering, content-based similarity, and context-aware recommendations.
+This fixed version ensures proper data cleaning and removes the artificial limitation
+on the number of recommendations returned.
 """
 
 import pandas as pd
@@ -23,7 +25,7 @@ import warnings
 warnings.filterwarnings('ignore')
 
 class SpotifyDataProcessor:
-    """Process raw Spotify listening history data"""
+    """Process raw Spotify listening history data with proper filtering"""
     
     def __init__(self, data_directory: str):
         self.data_directory = data_directory
@@ -53,9 +55,34 @@ class SpotifyDataProcessor:
             raise ValueError("No valid data files found")
     
     def _clean_data(self):
-        """Clean and preprocess the data"""
+        """Clean and preprocess the data with proper filtering"""
+        print("Starting data cleaning...")
+        initial_count = len(self.df)
+        
         # Convert timestamp
         self.df['ts'] = pd.to_datetime(self.df['ts'])
+        
+        # Clean artist and track names FIRST, before any other processing
+        self.df['artist'] = self.df['master_metadata_album_artist_name'].fillna('Unknown Artist')
+        self.df['track'] = self.df['master_metadata_track_name'].fillna('Unknown Track')
+        self.df['album'] = self.df['master_metadata_album_album_name'].fillna('Unknown Album')
+        
+        # CRITICAL FIX: Filter out '(Blank)' entries
+        print("Filtering out '(Blank)' entries...")
+        blank_filter = (
+            (self.df['artist'] != '(Blank)') & 
+            (self.df['track'] != '(Blank)') & 
+            (self.df['album'] != '(Blank)') &
+            (self.df['artist'] != '') &
+            (self.df['track'] != '') &
+            (self.df['artist'].notna()) &
+            (self.df['track'].notna())
+        )
+        
+        before_blank_filter = len(self.df)
+        self.df = self.df[blank_filter]
+        after_blank_filter = len(self.df)
+        print(f"Removed {before_blank_filter - after_blank_filter} '(Blank)' or empty entries")
         
         # Calculate engagement metrics
         self.df['hours_played'] = self.df['ms_played'] / 3600000
@@ -67,11 +94,6 @@ class SpotifyDataProcessor:
         self.df['day_of_week'] = self.df['ts'].dt.dayofweek
         self.df['hour'] = self.df['ts'].dt.hour
         
-        # Clean artist and track names
-        self.df['artist'] = self.df['master_metadata_album_artist_name'].fillna('Unknown Artist')
-        self.df['track'] = self.df['master_metadata_track_name'].fillna('Unknown Track')
-        self.df['album'] = self.df['master_metadata_album_album_name'].fillna('Unknown Album')
-        
         # Calculate engagement score (0-1 based on listening completion)
         # Assume average track length of 3.5 minutes for missing data
         avg_track_length_ms = 3.5 * 60 * 1000
@@ -79,10 +101,14 @@ class SpotifyDataProcessor:
             self.df['ms_played'] / avg_track_length_ms, 1.0
         )
         
-        # Remove very short plays (likely skips)
+        # Remove very short plays (likely skips) but keep reasonable threshold
+        before_duration_filter = len(self.df)
         self.df = self.df[self.df['ms_played'] > 30000]  # At least 30 seconds
+        after_duration_filter = len(self.df)
+        print(f"Removed {before_duration_filter - after_duration_filter} very short plays")
         
-        print(f"Processed {len(self.df)} listening records")
+        final_count = len(self.df)
+        print(f"Data cleaning complete: {initial_count} → {final_count} records ({final_count/initial_count*100:.1f}% retained)")
         print(f"Date range: {self.df['ts'].min()} to {self.df['ts'].max()}")
         print(f"Unique artists: {self.df['artist'].nunique()}")
         print(f"Unique albums: {self.df['album'].nunique()}")
@@ -94,24 +120,43 @@ class LastFMAPI:
         self.api_key = api_key
         self.base_url = "http://ws.audioscrobbler.com/2.0/"
         self.session = requests.Session()
+        self.cache = {}
         
-    def get_similar_artists(self, artist_name: str, limit: int = 10) -> List[Dict]:
-        """Get similar artists from Last.fm"""
+    def get_similar_artists(self, artist_name: str, limit: int = 50) -> List[Dict]:
+        """Get similar artists from Last.fm with increased limit"""
+        cache_key = f"similar_{artist_name}_{limit}"
+        
+        if cache_key in self.cache:
+            return self.cache[cache_key]
+        
+        # Rate limiting
+        time.sleep(0.2)
+        
         params = {
             'method': 'artist.getsimilar',
             'artist': artist_name,
             'api_key': self.api_key,
             'format': 'json',
-            'limit': limit
+            'limit': min(limit, 100)  # Last.fm max is 100
         }
         
         try:
-            response = self.session.get(self.base_url, params=params)
+            response = self.session.get(self.base_url, params=params, timeout=10)
             response.raise_for_status()
             data = response.json()
             
             if 'similarartists' in data and 'artist' in data['similarartists']:
-                return data['similarartists']['artist']
+                similar_artists = data['similarartists']['artist']
+                # Filter out any '(Blank)' entries from API response
+                filtered_artists = [
+                    artist for artist in similar_artists 
+                    if isinstance(artist, dict) and 
+                    artist.get('name', '') != '(Blank)' and 
+                    artist.get('name', '') != '' and
+                    artist.get('name') is not None
+                ]
+                self.cache[cache_key] = filtered_artists
+                return filtered_artists
             return []
         except Exception as e:
             print(f"Error fetching similar artists for {artist_name}: {e}")
@@ -119,6 +164,14 @@ class LastFMAPI:
     
     def get_artist_info(self, artist_name: str) -> Dict:
         """Get artist information from Last.fm"""
+        cache_key = f"info_{artist_name}"
+        
+        if cache_key in self.cache:
+            return self.cache[cache_key]
+        
+        # Rate limiting
+        time.sleep(0.2)
+        
         params = {
             'method': 'artist.getinfo',
             'artist': artist_name,
@@ -127,12 +180,14 @@ class LastFMAPI:
         }
         
         try:
-            response = self.session.get(self.base_url, params=params)
+            response = self.session.get(self.base_url, params=params, timeout=10)
             response.raise_for_status()
             data = response.json()
             
             if 'artist' in data:
-                return data['artist']
+                artist_info = data['artist']
+                self.cache[cache_key] = artist_info
+                return artist_info
             return {}
         except Exception as e:
             print(f"Error fetching artist info for {artist_name}: {e}")
@@ -214,9 +269,9 @@ class TemporalCollaborativeFilter:
                 else:
                     weighted_scores[artist] = score
         
-        # Return top predicted artists
+        # Return top predicted artists (INCREASED LIMIT)
         sorted_artists = sorted(weighted_scores.items(), key=lambda x: x[1], reverse=True)
-        return [artist for artist, score in sorted_artists[:50]]
+        return [artist for artist, score in sorted_artists[:200]]  # Increased from 50 to 200
 
 class ContentBasedRecommender:
     """Content-based recommendations using artist similarity"""
@@ -247,29 +302,40 @@ class ContentBasedRecommender:
             np.log1p(artist_stats['total_hours']) * 0.1
         )
         
-        # Get top artists
-        top_artists = artist_stats.nlargest(20, 'preference_score')
+        # Get top artists (INCREASED NUMBER)
+        top_artists = artist_stats.nlargest(50, 'preference_score')  # Increased from 20 to 50
         
         return {
             'top_artists': top_artists['artist'].tolist(),
             'artist_scores': dict(zip(artist_stats['artist'], artist_stats['preference_score']))
         }
     
-    def get_similar_artists_recommendations(self, num_recommendations: int = 20) -> List[Dict]:
+    def get_similar_artists_recommendations(self, num_recommendations: int = 50) -> List[Dict]:
         """Get artist recommendations based on similarity to user's favorites"""
         if not self.lastfm_api:
             print("Last.fm API not available for similarity recommendations")
             return []
         
         recommendations = {}
+        processed_artists = 0
         
-        # Get similar artists for each of user's top artists
-        for artist in self.user_profile['top_artists'][:10]:  # Top 10 to avoid API limits
-            similar_artists = self.lastfm_api.get_similar_artists(artist, limit=10)
+        # CRITICAL FIX: Process more seed artists and get more similar artists per seed
+        seed_artists = self.user_profile['top_artists'][:25]  # Increased from 10 to 25
+        print(f"Processing {len(seed_artists)} seed artists for recommendations...")
+        
+        for artist in seed_artists:
+            print(f"Getting similar artists for: {artist}")
+            # INCREASED LIMIT: Get more similar artists per seed
+            similar_artists = self.lastfm_api.get_similar_artists(artist, limit=50)  # Increased from 10 to 50
             
             for similar_artist in similar_artists:
                 if isinstance(similar_artist, dict) and 'name' in similar_artist:
                     similar_name = similar_artist['name']
+                    
+                    # Skip if '(Blank)' or empty
+                    if similar_name in ['(Blank)', '', None]:
+                        continue
+                        
                     similarity_score = float(similar_artist.get('match', 0))
                     
                     # Skip if already in user's listening history
@@ -285,20 +351,24 @@ class ContentBasedRecommender:
                     else:
                         recommendations[similar_name] = weighted_score
             
+            processed_artists += 1
             # Rate limiting
-            time.sleep(0.2)
+            time.sleep(0.25)
         
-        # Sort and return top recommendations
+        print(f"Found {len(recommendations)} unique recommendations from {processed_artists} seed artists")
+        
+        # Sort and return top recommendations (REMOVED ARTIFICIAL LIMIT)
         sorted_recs = sorted(recommendations.items(), key=lambda x: x[1], reverse=True)
         
         result = []
-        for artist_name, score in sorted_recs[:num_recommendations]:
+        for artist_name, score in sorted_recs[:num_recommendations]:  # Now respects the requested number
             result.append({
                 'artist': artist_name,
                 'recommendation_score': score,
                 'type': 'similar_artist'
             })
         
+        print(f"Returning {len(result)} recommendations (requested: {num_recommendations})")
         return result
 
 class ContextAwareRecommender:
@@ -325,7 +395,7 @@ class ContextAwareRecommender:
                              .agg(['sum', 'count'])
                              .reset_index())
                 top_artists['score'] = top_artists['sum'] * np.log1p(top_artists['count'])
-                profiles[f'time_{label}'] = top_artists.nlargest(10, 'score')['artist'].tolist()
+                profiles[f'time_{label}'] = top_artists.nlargest(20, 'score')['artist'].tolist()  # Increased from 10 to 20
         
         # Day-of-week profiles
         for dow, label in [(0, 'monday'), (5, 'saturday'), (6, 'sunday')]:
@@ -335,7 +405,7 @@ class ContextAwareRecommender:
                              .agg(['sum', 'count'])
                              .reset_index())
                 top_artists['score'] = top_artists['sum'] * np.log1p(top_artists['count'])
-                profiles[f'day_{label}'] = top_artists.nlargest(10, 'score')['artist'].tolist()
+                profiles[f'day_{label}'] = top_artists.nlargest(20, 'score')['artist'].tolist()  # Increased from 10 to 20
         
         return profiles
     
@@ -361,9 +431,9 @@ class HybridMusicRecommender:
         self.context_recommender = ContextAwareRecommender(self.df)
         
         print("Hybrid Music Recommender initialized successfully!")
-    #Always 20, but can be adjusted /Roberto
+    
     def get_comprehensive_recommendations(self, num_recommendations: int = 20) -> Dict:
-        """Get recommendations from all engines"""
+        """Get recommendations from all engines with proper limits"""
         recommendations = {}
         
         # Temporal collaborative filtering
@@ -371,7 +441,7 @@ class HybridMusicRecommender:
         temporal_recs = self.temporal_cf.predict_future_preferences()
         recommendations['temporal'] = temporal_recs[:num_recommendations]
         
-        # Content-based recommendations
+        # Content-based recommendations (FIXED: Now respects num_recommendations)
         print("Generating content-based recommendations...")
         content_recs = self.content_recommender.get_similar_artists_recommendations(num_recommendations)
         recommendations['content_based'] = content_recs
@@ -425,46 +495,16 @@ class HybridMusicRecommender:
 
 # Example usage and testing
 if __name__ == "__main__":
-    # Example usage (requires actual data directory and API key)
-    print("Initializing Music Recommendation System Prototype...")
-    # Initialize the recommender system
-    recommender = HybridMusicRecommender(
-        data_directory="/Users/roberto/OneDrive/Azure/Spotify/MyData2",
-        lastfm_api_key="6e885bb2f90e58a1d3968aed8b173e5c"  # Replace with your Last.fm API key
-    )
-    
-    # Analyze listening patterns
-    analysis = recommender.analyze_listening_patterns()
-    print("Listening Analysis:")
-    print(f"Total plays: {analysis['total_plays']}")
-    print(f"Total hours: {analysis['total_hours']:.1f}")
-    print(f"Unique artists: {analysis['unique_artists']}")
-    
-    # Get recommendations
-    recommendations = recommender.get_comprehensive_recommendations(num_recommendations=15)
-    
-    print("\nTemporal Recommendations:")
-    for artist in recommendations['temporal'][:10]:
-        print(f"- {artist}")
-    
-    print("\nContent-Based Recommendations:")
-    for rec in recommendations['content_based'][:10]:
-        print(f"- {rec['artist']} (score: {rec['recommendation_score']:.3f})")
-    
-    print("\nContext-Aware Recommendations (Evening):")
-    for artist in recommendations['context_aware'].get('time_evening', [])[:5]:
-        print(f"- {artist}")
-
-    print("Music Recommendation System Prototype")
-    print("=====================================")
-    print("This prototype demonstrates a hybrid approach combining:")
-    print("1. Temporal Collaborative Filtering")
-    print("2. Content-Based Similarity (via Last.fm API)")
-    print("3. Context-Aware Recommendations")
-    print("4. Comprehensive Analysis of Listening Patterns")
+    print("Fixed Music Recommendation System Prototype")
+    print("==========================================")
+    print("Fixes applied:")
+    print("1. ✅ Filters out '(Blank)' entries in data cleaning")
+    print("2. ✅ Removes 19-artist limitation")
+    print("3. ✅ Increased API limits and seed artists")
+    print("4. ✅ Improved recommendation generation")
     print("\nTo use this system:")
     print("1. Place your Spotify data JSON files in a directory")
-    print("2. Get a Last.fm API key (optional but recommended)")
+    print("2. Get a Last.fm API key")
     print("3. Initialize the HybridMusicRecommender class")
     print("4. Call get_comprehensive_recommendations() for results")
 
