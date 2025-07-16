@@ -118,7 +118,7 @@ python setup_secure_system.py
 Configure your API keys and sensitive settings using the interactive setup process. The system will guide you through obtaining necessary API keys and choosing the appropriate security method for your environment.
 
 ```bash
-python enhanced_secure_music_recommender.py --setup-config
+python music.py --setup-config
 ```
 
 ### **Data Preparation**
@@ -137,10 +137,10 @@ Set up global configuration for data folders and system parameters that will be 
 
 ```bash
 # Set global data folder
-python enhanced_secure_music_recommender.py --set-global-data-folder data/spotify
+python music.py --set-global-data-folder data/spotify
 
 # View current global configuration
-python enhanced_secure_music_recommender.py --show-global-config
+python music.py --show-global-config
 ```
 
 ### **First Run**
@@ -150,7 +150,7 @@ Start with a basic analysis of your listening patterns to verify that the system
 
 ```bash
 # Analyze your listening patterns
-python enhanced_secure_music_recommender.py --analyze-only --verbose
+python music.py --analyze-only --verbose
 ```
 
 **Generate Recommendations**
@@ -158,7 +158,7 @@ Create your first set of recommendations using the default settings, which will 
 
 ```bash
 # Generate 20 recommendations from your top artists
-python enhanced_secure_music_recommender.py --num-recs 20
+python music.py --num-recs 20
 ```
 
 **Explore Artist Tiers**
@@ -166,7 +166,7 @@ Experiment with different artist tiers to discover music based on different segm
 
 ```bash
 # Get recommendations from artists ranked 100-200 in your library
-python enhanced_secure_music_recommender.py --artist-tier-start 100 --artist-tier-end 200 --num-recs 25
+python music.py --artist-tier-start 100 --artist-tier-end 200 --num-recs 25
 ```
 
 
@@ -190,16 +190,16 @@ Lower-tier artists typically have fewer similar artists in the Last.fm database,
 
 ```bash
 # Discover music similar to your mainstream favorites
-python enhanced_secure_music_recommender.py --artist-tier-start 1 --artist-tier-end 25 --num-recs 30
+python music.py --artist-tier-start 1 --artist-tier-end 25 --num-recs 30
 
 # Explore recommendations based on your mid-tier preferences
-python enhanced_secure_music_recommender.py --artist-tier-start 150 --artist-tier-end 250 --num-recs 25
+python music.py --artist-tier-start 150 --artist-tier-end 250 --num-recs 25
 
 # Find music similar to your most niche artists
-python enhanced_secure_music_recommender.py --artist-tier-start 500 --artist-tier-end 700 --num-recs 20
+python music.py --artist-tier-start 500 --artist-tier-end 700 --num-recs 20
 
 # Quick discovery from recently played but not top-tier artists
-python enhanced_secure_music_recommender.py --artist-tier-start 50 --artist-tier-end 100 --num-recs 15
+python music.py --artist-tier-start 50 --artist-tier-end 100 --num-recs 15
 ```
 
 ### **Configuration Management**
@@ -218,7 +218,7 @@ MUSICBRAINZ_USER_AGENT=YourMusicRecommender/1.0 (your.email@example.com)
 EOF
 
 # Use environment configuration
-python enhanced_secure_music_recommender.py --config-method env --num-recs 25
+python music.py --config-method env --num-recs 25
 ```
 
 **Encrypted Configuration**
@@ -226,11 +226,11 @@ Encrypted configuration allows you to store sensitive information in encrypted f
 
 ```bash
 # Create encrypted configuration
-python enhanced_secure_music_recommender.py --setup-config
+python music.py --setup-config
 # Choose encrypted method and enter your password
 
 # Use encrypted configuration
-python enhanced_secure_music_recommender.py --config-method encrypted --num-recs 25
+python music.py --config-method encrypted --num-recs 25
 # Enter decryption password when prompted
 ```
 
@@ -239,7 +239,7 @@ Interactive configuration prompts for sensitive information at runtime, providin
 
 ```bash
 # Use interactive prompts
-python enhanced_secure_music_recommender.py --config-method prompt --num-recs 25
+python music.py --config-method prompt --num-recs 25
 # Enter API key and user agent when prompted
 ```
 
@@ -252,13 +252,13 @@ The global data folder setting eliminates the need to specify data paths repeate
 
 ```bash
 # Set global data folder for all future runs
-python enhanced_secure_music_recommender.py --set-global-data-folder /path/to/your/spotify/data
+python music.py --set-global-data-folder /path/to/your/spotify/data
 
 # View current global configuration
-python enhanced_secure_music_recommender.py --show-global-config
+python music.py --show-global-config
 
 # Override global setting for a single run
-python enhanced_secure_music_recommender.py --data-folder /different/path --num-recs 20
+python music.py --data-folder /different/path --num-recs 20
 ```
 
 **System Parameters**
@@ -287,13 +287,13 @@ Comprehensive analysis of your listening history reveals patterns in your musica
 
 ```bash
 # Basic listening analysis
-python enhanced_secure_music_recommender.py --analyze-only
+python music.py --analyze-only
 
 # Detailed analysis with tier distribution
-python enhanced_secure_music_recommender.py --analyze-only --verbose
+python music.py --analyze-only --verbose
 
 # Analysis with specific artist tier focus
-python enhanced_secure_music_recommender.py --analyze-only --artist-tier-start 100 --artist-tier-end 200 --verbose
+python music.py --analyze-only --artist-tier-start 100 --artist-tier-end 200 --verbose
 ```
 
 **Tier Distribution Analysis**
@@ -377,21 +377,21 @@ Configuration loading errors often result from incorrect file permissions, malfo
 Enable verbose output to see detailed information about system operation, including data loading progress, API call status, and recommendation generation steps.
 
 ```bash
-python enhanced_secure_music_recommender.py --verbose --analyze-only
+python music.py --verbose --analyze-only
 ```
 
 **Configuration Testing**
 Test configuration loading without running the full analysis to quickly identify configuration issues.
 
 ```bash
-python enhanced_secure_music_recommender.py --test-config
+python music.py --test-config
 ```
 
 **System Information**
 View current system configuration and status to verify that all components are properly configured.
 
 ```bash
-python enhanced_secure_music_recommender.py --show-global-config --verbose
+python music.py --show-global-config --verbose
 ```
 
 ### **Performance Optimization**
