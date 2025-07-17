@@ -252,7 +252,7 @@ class EnhancedSecureMusicRecommender:
         df = data_processor.load_data()
         
         # Initialize enhanced content recommender with tier selection
-        from fixed_recommendation_prototype import LastFMAPI, TemporalCollaborativeFilter, ContextAwareRecommender
+        from recommendation_prototype import LastFMAPI, TemporalCollaborativeFilter, ContextAwareRecommender
         
         lastfm_api = LastFMAPI(lastfm_api_key)
         

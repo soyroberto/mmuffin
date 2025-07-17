@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-🎵 Personal Music Recommendation System - Technical Implementation
+🎵 Personal Music Recommendation System - Enhanced Version with Artist Listing & JSON Export
 
 This system implements a HYBRID MACHINE LEARNING APPROACH that combines multiple
 AI/ML techniques to generate personalized music recommendations:
@@ -12,6 +12,10 @@ AI/ML techniques to generate personalized music recommendations:
 3. TEMPORAL ANALYSIS (ML): Applies time-series analysis to model taste evolution
 4. CONTEXT-AWARE FILTERING (ML): Uses clustering and pattern recognition for 
    contextual recommendations
+
+NEW FEATURES:
+5. ARTIST LISTING: View artists by rank/tier without generating recommendations
+6. JSON EXPORT: Save recommendations and analysis results to JSON files
 
 WHY THIS IS AI/MACHINE LEARNING:
 - Uses mathematical models to learn patterns from data
@@ -45,8 +49,8 @@ warnings.filterwarnings('ignore')
 # Import the secure configuration system
 from secrets_encryption_system import SecureConfigManager, SecureConfigLoader
 
-# Import the fixed recommendation system components
-from recommendation_prototype import HybridMusicRecommender, SpotifyDataProcessor, ContentBasedRecommender
+# Import the recommendation system components (updated import)
+from recommendation_prototype import HybridMusicRecommender, SpotifyDataProcessor, ContentBasedRecommender, LastFMAPI
 
 class GlobalConfig:
     """
@@ -107,14 +111,501 @@ class GlobalConfig:
         self.config["data_folder"] = path
         self.save_config()
 
-    def get_all_folders(self) -> Dict[str, str]:
-        """Get all configured folder paths"""
-        return {
-            "data": self.config["data_folder"],
-            "cache": self.config["cache_folder"],
-            "output": self.config["output_folder"],
-            "logs": self.config["logs_folder"]
+class ArtistListingManager:
+    """
+    ARTIST LISTING AND RANKING SYSTEM
+    
+    This component provides functionality to:
+    1. List artists by rank/tier without generating recommendations
+    2. Search for specific artists and their ranks
+    3. Display artist statistics and preference scores
+    4. Export artist rankings to JSON files
+    
+    TECHNICAL IMPLEMENTATION:
+    - Uses the same ML preference modeling as the recommendation system
+    - Calculates preference scores using weighted ensemble of multiple signals
+    - Provides fast lookup and filtering capabilities
+    - Supports pagination for large artist libraries
+    
+    This is useful for:
+    - Exploring which artists are at specific ranks (e.g., "Who is artist #9000?")
+    - Finding the rank of a specific artist
+    - Understanding the distribution of your music library
+    - Selecting appropriate tier ranges for recommendations
+    """
+    
+    def __init__(self, df):
+        self.df = df.copy()
+        self._build_artist_rankings()
+    
+    def _build_artist_rankings(self):
+        """
+        MACHINE LEARNING: PREFERENCE MODELING AND ARTIST RANKING
+        
+        This method implements the same ML preference modeling used in recommendations:
+        
+        STEP 1: FEATURE ENGINEERING
+        - Extract multiple features from raw listening data
+        - Calculate engagement scores (implicit feedback learning)
+        - Compute temporal features and listening patterns
+        
+        STEP 2: PREFERENCE SCORE CALCULATION
+        Uses a weighted linear combination (ensemble method):
+        - Total engagement (40% weight): Measures overall interest
+        - Average engagement (30% weight): Measures song completion rate
+        - Play count (20% weight): Measures frequency preference
+        - Total hours (10% weight): Measures time investment
+        
+        STEP 3: RANKING ALGORITHM
+        Sorts artists by computed preference scores to create tiers
+        """
+        print("🎯 Building comprehensive artist rankings using ML preference modeling...")
+        
+        # FEATURE ENGINEERING: Extract meaningful features from raw data
+        artist_stats = (self.df.groupby('artist')
+                       .agg({
+                           'engagement_score': ['sum', 'mean', 'count'],  # Engagement metrics
+                           'hours_played': 'sum',                         # Time investment
+                           'track': 'nunique',                           # Track diversity
+                           'album': 'nunique',                           # Album diversity
+                           'ts': ['min', 'max']                          # Temporal range
+                       })
+                       .round(3))
+        
+        # Flatten column names
+        artist_stats.columns = [
+            'total_engagement', 'avg_engagement', 'play_count', 'total_hours',
+            'unique_tracks', 'unique_albums', 'first_played', 'last_played'
+        ]
+        artist_stats = artist_stats.reset_index()
+        
+        # MACHINE LEARNING: PREFERENCE SCORE CALCULATION
+        # This is a weighted ensemble approach combining multiple signals
+        artist_stats['preference_score'] = (
+            artist_stats['total_engagement'] * 0.4 +      # Total interest signal
+            artist_stats['avg_engagement'] * 0.3 +        # Quality signal (completion rate)
+            np.log1p(artist_stats['play_count']) * 0.2 +  # Frequency signal (log-scaled)
+            np.log1p(artist_stats['total_hours']) * 0.1   # Time investment signal
+        )
+        
+        # RANKING ALGORITHM: Sort by preference score to create tiers
+        artist_stats = artist_stats.sort_values('preference_score', ascending=False).reset_index(drop=True)
+        artist_stats['rank'] = range(1, len(artist_stats) + 1)
+        
+        # Calculate additional metrics for analysis
+        artist_stats['days_active'] = (artist_stats['last_played'] - artist_stats['first_played']).dt.days + 1
+        artist_stats['avg_hours_per_day'] = artist_stats['total_hours'] / artist_stats['days_active']
+        
+        self.artist_rankings = artist_stats
+        
+        print(f"📊 Artist ranking complete: {len(artist_stats)} artists ranked by ML preference scores")
+    
+    def list_artists_by_tier(self, start_rank: int = 1, end_rank: int = 50, 
+                           show_details: bool = False) -> List[Dict]:
+        """
+        LIST ARTISTS BY RANK/TIER
+        
+        Returns artists within specified rank range with their statistics.
+        This allows users to see exactly which artists are at specific ranks.
+        
+        Args:
+            start_rank: Starting rank (1-based)
+            end_rank: Ending rank (1-based)
+            show_details: Include detailed statistics
+        
+        Returns:
+            List of artist dictionaries with rank and statistics
+        """
+        # Validate rank range
+        max_rank = len(self.artist_rankings)
+        start_rank = max(1, min(start_rank, max_rank))
+        end_rank = max(start_rank, min(end_rank, max_rank))
+        
+        # Filter artists by rank range
+        tier_artists = self.artist_rankings[
+            (self.artist_rankings['rank'] >= start_rank) & 
+            (self.artist_rankings['rank'] <= end_rank)
+        ].copy()
+        
+        # Prepare artist list
+        artist_list = []
+        for _, row in tier_artists.iterrows():
+            artist_info = {
+                'rank': int(row['rank']),
+                'artist': row['artist'],
+                'total_hours': round(row['total_hours'], 2),
+                'preference_score': round(row['preference_score'], 3)
+            }
+            
+            if show_details:
+                artist_info.update({
+                    'play_count': int(row['play_count']),
+                    'avg_engagement': round(row['avg_engagement'], 3),
+                    'unique_tracks': int(row['unique_tracks']),
+                    'unique_albums': int(row['unique_albums']),
+                    'days_active': int(row['days_active']),
+                    'avg_hours_per_day': round(row['avg_hours_per_day'], 3),
+                    'first_played': row['first_played'].strftime('%Y-%m-%d'),
+                    'last_played': row['last_played'].strftime('%Y-%m-%d')
+                })
+            
+            artist_list.append(artist_info)
+        
+        return artist_list
+    
+    def search_artist(self, artist_name: str, fuzzy: bool = True) -> List[Dict]:
+        """
+        SEARCH FOR SPECIFIC ARTIST AND GET RANK
+        
+        Finds artists matching the search term and returns their rank and statistics.
+        Useful for finding "What rank is Artist X?" or "Is Artist Y in my library?"
+        
+        Args:
+            artist_name: Artist name to search for
+            fuzzy: Enable fuzzy matching (case-insensitive, partial matches)
+        
+        Returns:
+            List of matching artists with their ranks and statistics
+        """
+        if fuzzy:
+            # Case-insensitive partial matching
+            mask = self.artist_rankings['artist'].str.contains(
+                artist_name, case=False, na=False, regex=False
+            )
+        else:
+            # Exact matching
+            mask = self.artist_rankings['artist'] == artist_name
+        
+        matching_artists = self.artist_rankings[mask].copy()
+        
+        # Prepare results
+        results = []
+        for _, row in matching_artists.iterrows():
+            results.append({
+                'rank': int(row['rank']),
+                'artist': row['artist'],
+                'total_hours': round(row['total_hours'], 2),
+                'preference_score': round(row['preference_score'], 3),
+                'play_count': int(row['play_count']),
+                'unique_tracks': int(row['unique_tracks']),
+                'unique_albums': int(row['unique_albums'])
+            })
+        
+        return results
+    
+    def get_tier_statistics(self, start_rank: int = 1, end_rank: int = 50) -> Dict:
+        """
+        GET STATISTICAL SUMMARY FOR A TIER RANGE
+        
+        Provides aggregate statistics for artists within specified rank range.
+        Useful for understanding the characteristics of different tiers.
+        """
+        tier_artists = self.artist_rankings[
+            (self.artist_rankings['rank'] >= start_rank) & 
+            (self.artist_rankings['rank'] <= end_rank)
+        ]
+        
+        if len(tier_artists) == 0:
+            return {'error': f'No artists found in tier {start_rank}-{end_rank}'}
+        
+        stats = {
+            'tier_range': f'{start_rank}-{end_rank}',
+            'artist_count': len(tier_artists),
+            'total_hours': round(tier_artists['total_hours'].sum(), 2),
+            'avg_hours_per_artist': round(tier_artists['total_hours'].mean(), 2),
+            'total_plays': int(tier_artists['play_count'].sum()),
+            'avg_plays_per_artist': round(tier_artists['play_count'].mean(), 1),
+            'avg_preference_score': round(tier_artists['preference_score'].mean(), 3),
+            'preference_score_range': {
+                'min': round(tier_artists['preference_score'].min(), 3),
+                'max': round(tier_artists['preference_score'].max(), 3)
+            },
+            'engagement_stats': {
+                'avg_engagement': round(tier_artists['avg_engagement'].mean(), 3),
+                'min_engagement': round(tier_artists['avg_engagement'].min(), 3),
+                'max_engagement': round(tier_artists['avg_engagement'].max(), 3)
+            }
         }
+        
+        return stats
+    
+    def export_artist_rankings(self, output_file: str, start_rank: int = 1, 
+                             end_rank: Optional[int] = None, include_details: bool = True) -> str:
+        """
+        EXPORT ARTIST RANKINGS TO JSON FILE
+        
+        Saves artist rankings and statistics to a JSON file for future reference.
+        Useful for sharing, analysis, or importing into other tools.
+        
+        Args:
+            output_file: Path to output JSON file
+            start_rank: Starting rank to export
+            end_rank: Ending rank to export (None = all remaining)
+            include_details: Include detailed statistics
+        
+        Returns:
+            Path to created file
+        """
+        if end_rank is None:
+            end_rank = len(self.artist_rankings)
+        
+        # Get artist list
+        artist_list = self.list_artists_by_tier(start_rank, end_rank, include_details)
+        
+        # Prepare export data
+        export_data = {
+            'export_info': {
+                'timestamp': datetime.now().isoformat(),
+                'total_artists_in_library': len(self.artist_rankings),
+                'exported_range': f'{start_rank}-{end_rank}',
+                'exported_count': len(artist_list),
+                'include_details': include_details
+            },
+            'tier_statistics': self.get_tier_statistics(start_rank, end_rank),
+            'artists': artist_list
+        }
+        
+        # Ensure output directory exists
+        output_path = Path(output_file)
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        
+        # Save to JSON file
+        try:
+            with open(output_path, 'w', encoding='utf-8') as f:
+                json.dump(export_data, f, indent=2, ensure_ascii=False)
+            
+            print(f"✅ Artist rankings exported to: {output_path}")
+            print(f"📊 Exported {len(artist_list)} artists (ranks {start_rank}-{end_rank})")
+            return str(output_path)
+            
+        except Exception as e:
+            print(f"❌ Error exporting artist rankings: {e}")
+            raise
+
+class JSONExportManager:
+    """
+    JSON EXPORT SYSTEM FOR RECOMMENDATIONS AND ANALYSIS
+    
+    This component provides comprehensive JSON export functionality for:
+    1. Recommendation results from all AI/ML engines
+    2. Analysis results and statistics
+    3. Artist rankings and tier information
+    4. System configuration and metadata
+    
+    TECHNICAL IMPLEMENTATION:
+    - Structured JSON format for easy consumption by other tools
+    - Comprehensive metadata for reproducibility
+    - Support for different export formats (summary vs detailed)
+    - Automatic timestamping and versioning
+    
+    This is useful for:
+    - Saving recommendation results for future reference
+    - Analyzing recommendation patterns over time
+    - Sharing results with other applications
+    - Creating datasets for further analysis
+    - Backup and archival of recommendation sessions
+    """
+    
+    def __init__(self, global_config: GlobalConfig):
+        self.global_config = global_config
+        self.output_folder = Path(global_config.get("output_folder", "output"))
+        self.output_folder.mkdir(parents=True, exist_ok=True)
+    
+    def export_recommendations(self, recommendations: Dict, analysis: Dict, 
+                             config_info: Dict, output_file: Optional[str] = None) -> str:
+        """
+        EXPORT COMPREHENSIVE RECOMMENDATION RESULTS TO JSON
+        
+        Creates a structured JSON file containing all recommendation results,
+        analysis data, and metadata for future reference and analysis.
+        
+        Args:
+            recommendations: Results from hybrid recommendation system
+            analysis: Analysis results and statistics
+            config_info: System configuration information
+            output_file: Custom output file path (optional)
+        
+        Returns:
+            Path to created JSON file
+        """
+        timestamp = datetime.now()
+        
+        # Generate output filename if not provided
+        if output_file is None:
+            timestamp_str = timestamp.strftime("%Y%m%d_%H%M%S")
+            tier_info = recommendations.get('tier_info', {})
+            tier_start = tier_info.get('start', 'unknown')
+            tier_end = tier_info.get('end', 'unknown')
+            output_file = f"music_recommendations_tier_{tier_start}-{tier_end}_{timestamp_str}.json"
+        
+        output_path = self.output_folder / output_file
+        
+        # Prepare comprehensive export data
+        export_data = {
+            'export_metadata': {
+                'timestamp': timestamp.isoformat(),
+                'export_type': 'music_recommendations',
+                'system_version': '2.0',
+                'ai_ml_engines': [
+                    'content_based_filtering',
+                    'temporal_collaborative_filtering', 
+                    'context_aware_filtering',
+                    'artist_tier_selection'
+                ]
+            },
+            
+            'session_info': {
+                'config_method': config_info.get('config_method'),
+                'data_folder': config_info.get('data_folder'),
+                'artist_tier_start': config_info.get('artist_tier_start'),
+                'artist_tier_end': config_info.get('artist_tier_end'),
+                'total_artists_in_library': analysis.get('unique_artists'),
+                'total_listening_hours': analysis.get('total_hours'),
+                'date_range': analysis.get('date_range')
+            },
+            
+            'tier_analysis': {
+                'selected_tier': recommendations.get('tier_info', {}),
+                'tier_distribution': analysis.get('tier_distribution', {})
+            },
+            
+            'ai_ml_recommendations': {
+                'content_based': {
+                    'description': 'External knowledge graph similarity matching using Last.fm API',
+                    'algorithm': 'Content-based filtering with artist tier selection',
+                    'recommendations': recommendations.get('content_based', [])
+                },
+                'temporal_collaborative': {
+                    'description': 'Matrix factorization and time-series prediction of taste evolution',
+                    'algorithm': 'Non-negative Matrix Factorization (NMF) + trend analysis',
+                    'recommendations': recommendations.get('temporal', [])
+                },
+                'context_aware': {
+                    'description': 'Clustering and pattern recognition for contextual music preferences',
+                    'algorithm': 'K-Means clustering + context-specific preference modeling',
+                    'recommendations': recommendations.get('context_aware', {})
+                }
+            },
+            
+            'listening_analysis': {
+                'basic_statistics': {
+                    'total_plays': analysis.get('total_plays'),
+                    'total_hours': analysis.get('total_hours'),
+                    'unique_artists': analysis.get('unique_artists'),
+                    'unique_albums': analysis.get('unique_albums'),
+                    'date_range': analysis.get('date_range')
+                },
+                'top_artists': analysis.get('top_artists', {}),
+                'current_tier_stats': analysis.get('current_tier', {})
+            },
+            
+            'system_configuration': config_info
+        }
+        
+        # Save to JSON file
+        try:
+            with open(output_path, 'w', encoding='utf-8') as f:
+                json.dump(export_data, f, indent=2, ensure_ascii=False, default=str)
+            
+            print(f"✅ Recommendations exported to: {output_path}")
+            print(f"📊 Export includes: AI/ML recommendations, analysis, and metadata")
+            return str(output_path)
+            
+        except Exception as e:
+            print(f"❌ Error exporting recommendations: {e}")
+            raise
+    
+    def export_analysis_only(self, analysis: Dict, config_info: Dict, 
+                           output_file: Optional[str] = None) -> str:
+        """
+        EXPORT ANALYSIS RESULTS ONLY (WITHOUT RECOMMENDATIONS)
+        
+        Creates a JSON file containing only analysis results and statistics.
+        Useful when running analysis-only mode.
+        """
+        timestamp = datetime.now()
+        
+        if output_file is None:
+            timestamp_str = timestamp.strftime("%Y%m%d_%H%M%S")
+            output_file = f"music_analysis_{timestamp_str}.json"
+        
+        output_path = self.output_folder / output_file
+        
+        export_data = {
+            'export_metadata': {
+                'timestamp': timestamp.isoformat(),
+                'export_type': 'music_analysis',
+                'system_version': '2.0'
+            },
+            
+            'session_info': {
+                'config_method': config_info.get('config_method'),
+                'data_folder': config_info.get('data_folder'),
+                'analysis_mode': 'analysis_only'
+            },
+            
+            'listening_analysis': analysis,
+            'system_configuration': config_info
+        }
+        
+        try:
+            with open(output_path, 'w', encoding='utf-8') as f:
+                json.dump(export_data, f, indent=2, ensure_ascii=False, default=str)
+            
+            print(f"✅ Analysis exported to: {output_path}")
+            return str(output_path)
+            
+        except Exception as e:
+            print(f"❌ Error exporting analysis: {e}")
+            raise
+    
+    def create_summary_export(self, recommendations: Dict, analysis: Dict, 
+                            output_file: Optional[str] = None) -> str:
+        """
+        CREATE SUMMARY EXPORT (COMPACT VERSION)
+        
+        Creates a compact JSON export with only the most important information.
+        Useful for quick reference or when file size is a concern.
+        """
+        timestamp = datetime.now()
+        
+        if output_file is None:
+            timestamp_str = timestamp.strftime("%Y%m%d_%H%M%S")
+            output_file = f"music_summary_{timestamp_str}.json"
+        
+        output_path = self.output_folder / output_file
+        
+        # Extract top recommendations from content-based engine
+        content_recs = recommendations.get('content_based', [])
+        top_recommendations = []
+        for rec in content_recs[:20]:  # Top 20 only
+            if isinstance(rec, dict):
+                top_recommendations.append({
+                    'artist': rec.get('artist', 'Unknown'),
+                    'score': rec.get('recommendation_score', 0)
+                })
+            else:
+                top_recommendations.append({'artist': str(rec), 'score': 0})
+        
+        export_data = {
+            'timestamp': timestamp.isoformat(),
+            'tier_used': f"{recommendations.get('tier_info', {}).get('start', '?')}-{recommendations.get('tier_info', {}).get('end', '?')}",
+            'total_artists_in_library': analysis.get('unique_artists'),
+            'total_hours': analysis.get('total_hours'),
+            'top_recommendations': top_recommendations,
+            'top_artists_overall': dict(list(analysis.get('top_artists', {}).items())[:10])
+        }
+        
+        try:
+            with open(output_path, 'w', encoding='utf-8') as f:
+                json.dump(export_data, f, indent=2, ensure_ascii=False)
+            
+            print(f"✅ Summary exported to: {output_path}")
+            return str(output_path)
+            
+        except Exception as e:
+            print(f"❌ Error creating summary export: {e}")
+            raise
 
 class EnhancedContentBasedRecommender(ContentBasedRecommender):
     """
@@ -577,6 +1068,10 @@ class EnhancedSecureMusicRecommender:
     3. CONTEXT-AWARE FILTERING (ML): Clustering and pattern recognition
     4. ENSEMBLE METHODS (ML): Combines multiple models for better predictions
     
+    NEW FEATURES:
+    5. ARTIST LISTING: View artists by rank/tier without generating recommendations
+    6. JSON EXPORT: Save recommendations and analysis results to JSON files
+    
     WHY THIS IS ARTIFICIAL INTELLIGENCE AND MACHINE LEARNING:
     
     MACHINE LEARNING ASPECTS:
@@ -623,6 +1118,10 @@ class EnhancedSecureMusicRecommender:
         self.config_loader = SecureConfigLoader(self.config_manager)
         self.recommender = None
         
+        # Initialize new feature managers
+        self.artist_listing_manager = None
+        self.json_export_manager = JSONExportManager(self.global_config)
+        
         # Load configuration
         self.secrets = self._load_secure_config()
         
@@ -666,6 +1165,7 @@ class EnhancedSecureMusicRecommender:
         2. Temporal Collaborative Filter (time-series ML)
         3. Context-Aware Recommender (clustering ML)
         4. External API integration (knowledge graph AI)
+        5. Artist Listing Manager (NEW FEATURE)
         """
         lastfm_api_key = self.secrets.get('LASTFM_API_KEY')
         
@@ -681,8 +1181,6 @@ class EnhancedSecureMusicRecommender:
         df = data_processor.load_data()
         
         # STEP 2: INITIALIZE AI/ML ENGINES
-        from recommendation_prototype import LastFMAPI
-        
         # External Knowledge Graph API
         lastfm_api = LastFMAPI(lastfm_api_key)
         
@@ -697,11 +1195,88 @@ class EnhancedSecureMusicRecommender:
         # ENGINE 3: CONTEXT-AWARE RECOMMENDER
         self.context_recommender = ContextAwareRecommender(df)
         
+        # NEW FEATURE: ARTIST LISTING MANAGER
+        self.artist_listing_manager = ArtistListingManager(df)
+        
         # Store dataframe for analysis
         self.df = df
         
         print("✅ HYBRID AI/ML system initialized successfully")
         print("🧠 Active ML engines: Content-Based, Temporal, Context-Aware")
+        print("🆕 New features: Artist Listing, JSON Export")
+    
+    def list_artists_by_tier(self, start_rank: int = 1, end_rank: int = 50, 
+                           show_details: bool = False) -> List[Dict]:
+        """
+        NEW FEATURE: LIST ARTISTS BY RANK/TIER
+        
+        This feature allows you to see which artists are at specific ranks
+        without generating recommendations. Very useful for:
+        - Finding out "Who is artist #9000?"
+        - Exploring different tiers before selecting recommendation ranges
+        - Understanding the distribution of your music library
+        
+        TECHNICAL IMPLEMENTATION:
+        Uses the same ML preference modeling as recommendations but only
+        returns the ranked artist list instead of generating recommendations.
+        
+        Args:
+            start_rank: Starting rank (1-based)
+            end_rank: Ending rank (1-based) 
+            show_details: Include detailed statistics
+        
+        Returns:
+            List of artists with ranks and statistics
+        """
+        if not self.artist_listing_manager:
+            raise ValueError("Artist listing manager not initialized")
+        
+        return self.artist_listing_manager.list_artists_by_tier(
+            start_rank, end_rank, show_details
+        )
+    
+    def search_artist(self, artist_name: str, fuzzy: bool = True) -> List[Dict]:
+        """
+        NEW FEATURE: SEARCH FOR ARTIST AND GET RANK
+        
+        Find specific artists in your library and see their ranks.
+        Useful for questions like "What rank is Beethoven?" or "Do I have any Radiohead?"
+        
+        Args:
+            artist_name: Artist name to search for
+            fuzzy: Enable fuzzy matching (case-insensitive, partial matches)
+        
+        Returns:
+            List of matching artists with ranks and statistics
+        """
+        if not self.artist_listing_manager:
+            raise ValueError("Artist listing manager not initialized")
+        
+        return self.artist_listing_manager.search_artist(artist_name, fuzzy)
+    
+    def export_artist_rankings(self, output_file: str, start_rank: int = 1, 
+                             end_rank: Optional[int] = None, include_details: bool = True) -> str:
+        """
+        NEW FEATURE: EXPORT ARTIST RANKINGS TO JSON
+        
+        Save your complete artist rankings to a JSON file for future reference.
+        Useful for sharing, analysis, or importing into other tools.
+        
+        Args:
+            output_file: Path to output JSON file
+            start_rank: Starting rank to export
+            end_rank: Ending rank to export (None = all remaining)
+            include_details: Include detailed statistics
+        
+        Returns:
+            Path to created file
+        """
+        if not self.artist_listing_manager:
+            raise ValueError("Artist listing manager not initialized")
+        
+        return self.artist_listing_manager.export_artist_rankings(
+            output_file, start_rank, end_rank, include_details
+        )
     
     def get_recommendations(self, num_recommendations: int = 20) -> Dict:
         """
@@ -764,6 +1339,71 @@ class EnhancedSecureMusicRecommender:
         
         return recommendations
     
+    def export_recommendations_to_json(self, recommendations: Dict, analysis: Dict, 
+                                     output_file: Optional[str] = None) -> str:
+        """
+        NEW FEATURE: EXPORT RECOMMENDATIONS TO JSON
+        
+        Save comprehensive recommendation results to a JSON file for future reference.
+        The JSON includes all AI/ML engine results, analysis data, and metadata.
+        
+        TECHNICAL IMPLEMENTATION:
+        - Structured JSON format for easy consumption by other tools
+        - Comprehensive metadata for reproducibility
+        - Includes results from all AI/ML engines
+        - Automatic timestamping and versioning
+        
+        Args:
+            recommendations: Results from hybrid recommendation system
+            analysis: Analysis results and statistics
+            output_file: Custom output file path (optional)
+        
+        Returns:
+            Path to created JSON file
+        """
+        config_info = self.get_config_info()
+        return self.json_export_manager.export_recommendations(
+            recommendations, analysis, config_info, output_file
+        )
+    
+    def export_analysis_to_json(self, analysis: Dict, output_file: Optional[str] = None) -> str:
+        """
+        NEW FEATURE: EXPORT ANALYSIS RESULTS TO JSON
+        
+        Save analysis results to JSON file (for analysis-only runs).
+        
+        Args:
+            analysis: Analysis results and statistics
+            output_file: Custom output file path (optional)
+        
+        Returns:
+            Path to created JSON file
+        """
+        config_info = self.get_config_info()
+        return self.json_export_manager.export_analysis_only(
+            analysis, config_info, output_file
+        )
+    
+    def create_summary_json(self, recommendations: Dict, analysis: Dict, 
+                          output_file: Optional[str] = None) -> str:
+        """
+        NEW FEATURE: CREATE COMPACT SUMMARY JSON
+        
+        Creates a compact JSON export with only the most important information.
+        Useful for quick reference or when file size is a concern.
+        
+        Args:
+            recommendations: Results from hybrid recommendation system
+            analysis: Analysis results and statistics
+            output_file: Custom output file path (optional)
+        
+        Returns:
+            Path to created JSON file
+        """
+        return self.json_export_manager.create_summary_export(
+            recommendations, analysis, output_file
+        )
+    
     def analyze_patterns(self) -> Dict:
         """
         COMPREHENSIVE PATTERN ANALYSIS: STATISTICAL AND ML INSIGHTS
@@ -799,37 +1439,23 @@ class EnhancedSecureMusicRecommender:
         analysis['current_tier'] = tier_info
         
         # TIER DISTRIBUTION ANALYSIS: Statistical breakdown by preference tiers
-        artist_stats = (self.df.groupby('artist')['hours_played']
-                       .sum()
-                       .sort_values(ascending=False)
-                       .reset_index())
-        artist_stats['rank'] = range(1, len(artist_stats) + 1)
-        
-        # Create tier distribution for analysis
-        tier_ranges = [
-            (1, 10, "Top 10"),
-            (11, 50, "Top 11-50"),
-            (51, 100, "Top 51-100"),
-            (101, 200, "Top 101-200"),
-            (201, 500, "Top 201-500"),
-            (501, 1000, "Top 501-1000"),
-            (1001, len(artist_stats), "Beyond 1000")
-        ]
-        
-        tier_distribution = {}
-        for start, end, label in tier_ranges:
-            tier_artists = artist_stats[
-                (artist_stats['rank'] >= start) & 
-                (artist_stats['rank'] <= min(end, len(artist_stats)))
+        if self.artist_listing_manager:
+            tier_ranges = [
+                (1, 10, "Top 10"),
+                (11, 50, "Top 11-50"),
+                (51, 100, "Top 51-100"),
+                (101, 200, "Top 101-200"),
+                (201, 500, "Top 201-500"),
+                (501, 1000, "Top 501-1000")
             ]
-            if len(tier_artists) > 0:
-                tier_distribution[label] = {
-                    'count': len(tier_artists),
-                    'total_hours': tier_artists['hours_played'].sum(),
-                    'avg_hours': tier_artists['hours_played'].mean()
-                }
-        
-        analysis['tier_distribution'] = tier_distribution
+            
+            tier_distribution = {}
+            for start, end, label in tier_ranges:
+                tier_stats = self.artist_listing_manager.get_tier_statistics(start, end)
+                if 'error' not in tier_stats:
+                    tier_distribution[label] = tier_stats
+            
+            analysis['tier_distribution'] = tier_distribution
         
         return analysis
     
@@ -846,8 +1472,9 @@ class EnhancedSecureMusicRecommender:
         }
         
         # Add global config info
-        global_folders = self.global_config.get_all_folders()
-        info.update({f"global_{k}_folder": v for k, v in global_folders.items()})
+        for key, value in self.global_config.config.items():
+            if key.endswith('_folder'):
+                info[f"global_{key}"] = value
         
         return info
     
@@ -865,9 +1492,15 @@ def main():
     - Multiple AI/ML engines (content, temporal, context-aware)
     - Comprehensive analysis and pattern recognition
     - Secure configuration management
+    
+    NEW FEATURES:
+    - Artist listing by rank/tier (--list-artists)
+    - Artist search functionality (--search-artist)
+    - JSON export for recommendations and analysis (--export-json)
+    - Artist rankings export (--export-artists)
     """
     parser = argparse.ArgumentParser(
-        description='🎵 HYBRID AI/ML Music Recommendation System',
+        description='🎵 HYBRID AI/ML Music Recommendation System with Artist Listing & JSON Export',
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 🧠 AI/ML FEATURES:
@@ -876,21 +1509,36 @@ def main():
   • Context-Aware: Clustering + pattern recognition for contextual music
   • Artist Tier Selection: Preference modeling + ranking algorithms
 
+🆕 NEW FEATURES:
+  • Artist Listing: View artists by rank without generating recommendations
+  • Artist Search: Find specific artists and their ranks in your library
+  • JSON Export: Save recommendations and analysis to structured JSON files
+  • Artist Rankings Export: Export complete artist rankings with statistics
+
 EXAMPLES:
   # Get AI recommendations from your top 50 artists
-  python music.py --num-recs 30
+  python xmusic.py --num-recs 30
 
   # Explore AI recommendations from artists ranked 200-300 (faster processing!)
-  python music.py --artist-tier-start 200 --artist-tier-end 300 --num-recs 25
+  python xmusic.py --artist-tier-start 200 --artist-tier-end 300 --num-recs 25
 
-  # Use different data folder with ML analysis
-  python music.py --data-folder /path/to/spotify/data --num-recs 20
+  # List artists in a specific tier range (NEW FEATURE)
+  python xmusic.py --list-artists --artist-tier-start 9000 --artist-tier-end 9050
+
+  # Search for a specific artist and see their rank (NEW FEATURE)
+  python xmusic.py --search-artist "Beethoven"
+
+  # Get recommendations and export to JSON (NEW FEATURE)
+  python xmusic.py --num-recs 30 --export-json
+
+  # Export artist rankings to JSON file (NEW FEATURE)
+  python xmusic.py --export-artists --artist-tier-start 1 --artist-tier-end 1000
 
   # Set global data folder for all AI/ML runs
-  python music.py --set-global-data-folder /path/to/spotify/data
+  python xmusic.py --set-global-data-folder /path/to/spotify/data
 
-  # Comprehensive ML pattern analysis
-  python music.py --analyze-only --verbose
+  # Comprehensive ML pattern analysis with JSON export
+  python xmusic.py --analyze-only --verbose --export-json
         """
     )
     
@@ -909,6 +1557,24 @@ EXAMPLES:
     parser.add_argument('--num-recs', type=int, default=20, help='Number of AI recommendations')
     parser.add_argument('--analyze-only', action='store_true', help='Only run ML pattern analysis')
     parser.add_argument('--verbose', action='store_true', help='Show detailed AI/ML process info')
+    
+    # NEW FEATURE: Artist listing options
+    parser.add_argument('--list-artists', action='store_true', 
+                       help='List artists by rank/tier without generating recommendations')
+    parser.add_argument('--search-artist', type=str, 
+                       help='Search for specific artist and show rank')
+    parser.add_argument('--show-details', action='store_true',
+                       help='Show detailed artist statistics (use with --list-artists)')
+    
+    # NEW FEATURE: JSON export options
+    parser.add_argument('--export-json', action='store_true',
+                       help='Export recommendations/analysis to JSON file')
+    parser.add_argument('--export-artists', action='store_true',
+                       help='Export artist rankings to JSON file')
+    parser.add_argument('--export-summary', action='store_true',
+                       help='Create compact summary JSON export')
+    parser.add_argument('--output-file', type=str,
+                       help='Custom output file path for JSON exports')
     
     # Global configuration
     parser.add_argument('--set-global-data-folder', help='Set global data folder and exit')
@@ -995,6 +1661,78 @@ EXAMPLES:
             for key, value in config_info.items():
                 print(f"   {key}: {value}")
         
+        # NEW FEATURE: Artist search functionality
+        if args.search_artist:
+            print(f"\n🔍 Searching for artist: '{args.search_artist}'")
+            search_results = secure_recommender.search_artist(args.search_artist)
+            
+            if search_results:
+                print(f"✅ Found {len(search_results)} matching artist(s):")
+                for result in search_results:
+                    print(f"   #{result['rank']}: {result['artist']}")
+                    print(f"      Hours: {result['total_hours']}, Plays: {result['play_count']}")
+                    print(f"      Tracks: {result['unique_tracks']}, Albums: {result['unique_albums']}")
+                    print(f"      ML Preference Score: {result['preference_score']}")
+            else:
+                print(f"❌ No artists found matching '{args.search_artist}'")
+                print("Try using partial names or check spelling")
+            
+            # Export search results if requested
+            if args.export_json:
+                output_file = args.output_file or f"artist_search_{args.search_artist.replace(' ', '_')}.json"
+                export_data = {
+                    'search_query': args.search_artist,
+                    'timestamp': datetime.now().isoformat(),
+                    'results': search_results
+                }
+                
+                output_path = Path(output_file)
+                with open(output_path, 'w', encoding='utf-8') as f:
+                    json.dump(export_data, f, indent=2, ensure_ascii=False)
+                print(f"✅ Search results exported to: {output_path}")
+            
+            return
+        
+        # NEW FEATURE: Artist listing functionality
+        if args.list_artists:
+            print(f"\n📋 Listing artists in tier {args.artist_tier_start}-{args.artist_tier_end}")
+            artist_list = secure_recommender.list_artists_by_tier(
+                args.artist_tier_start, args.artist_tier_end, args.show_details
+            )
+            
+            print(f"✅ Found {len(artist_list)} artists in this tier:")
+            for artist_info in artist_list:
+                if args.show_details:
+                    print(f"   #{artist_info['rank']}: {artist_info['artist']}")
+                    print(f"      Hours: {artist_info['total_hours']}, Plays: {artist_info['play_count']}")
+                    print(f"      Engagement: {artist_info['avg_engagement']:.3f}")
+                    print(f"      Tracks: {artist_info['unique_tracks']}, Albums: {artist_info['unique_albums']}")
+                    print(f"      Active: {artist_info['first_played']} to {artist_info['last_played']}")
+                    print(f"      ML Preference Score: {artist_info['preference_score']}")
+                    print()
+                else:
+                    print(f"   #{artist_info['rank']}: {artist_info['artist']} ({artist_info['total_hours']}h)")
+            
+            # Export artist list if requested
+            if args.export_json or args.export_artists:
+                output_file = args.output_file or f"artist_list_tier_{args.artist_tier_start}-{args.artist_tier_end}.json"
+                export_path = secure_recommender.export_artist_rankings(
+                    output_file, args.artist_tier_start, args.artist_tier_end, args.show_details
+                )
+                print(f"✅ Artist list exported to: {export_path}")
+            
+            return
+        
+        # NEW FEATURE: Export artist rankings only
+        if args.export_artists:
+            print(f"\n📤 Exporting artist rankings {args.artist_tier_start}-{args.artist_tier_end}")
+            output_file = args.output_file or f"artist_rankings_{args.artist_tier_start}-{args.artist_tier_end}.json"
+            export_path = secure_recommender.export_artist_rankings(
+                output_file, args.artist_tier_start, args.artist_tier_end, True
+            )
+            print(f"✅ Artist rankings exported to: {export_path}")
+            return
+        
         if args.analyze_only:
             # ML PATTERN ANALYSIS
             print("\n📊 Running comprehensive ML pattern analysis...")
@@ -1019,11 +1757,24 @@ EXAMPLES:
             if args.verbose and 'tier_distribution' in analysis:
                 print(f"\n📊 ML Artist Tier Distribution:")
                 for tier_name, tier_data in analysis['tier_distribution'].items():
-                    print(f"   {tier_name}: {tier_data['count']} artists, {tier_data['total_hours']:.1f}h total")
+                    if isinstance(tier_data, dict) and 'artist_count' in tier_data:
+                        print(f"   {tier_name}: {tier_data['artist_count']} artists, {tier_data['total_hours']:.1f}h total")
             
             print(f"\n🏆 Top 10 Artists (from ML preference modeling):")
             for i, (artist, hours) in enumerate(list(analysis['top_artists'].items())[:10], 1):
                 print(f"{i:2d}. {artist} ({hours:.1f} hours)")
+            
+            # NEW FEATURE: Export analysis to JSON
+            if args.export_json:
+                if args.export_summary:
+                    # Create summary export (no recommendations to summarize in analysis-only mode)
+                    output_file = args.output_file or "music_analysis_summary.json"
+                    export_path = secure_recommender.json_export_manager.export_analysis_only(
+                        analysis, secure_recommender.get_config_info(), output_file
+                    )
+                else:
+                    export_path = secure_recommender.export_analysis_to_json(analysis, args.output_file)
+                print(f"\n✅ Analysis exported to JSON: {export_path}")
         
         else:
             # HYBRID AI/ML RECOMMENDATION GENERATION
@@ -1084,6 +1835,21 @@ EXAMPLES:
                     for context, artists in context_recs.items():
                         if artists:
                             print(f"   {context}: {', '.join(artists[:5])}")
+            
+            # NEW FEATURE: Export recommendations to JSON
+            if args.export_json:
+                analysis = secure_recommender.analyze_patterns()
+                
+                if args.export_summary:
+                    export_path = secure_recommender.create_summary_json(
+                        recommendations, analysis, args.output_file
+                    )
+                else:
+                    export_path = secure_recommender.export_recommendations_to_json(
+                        recommendations, analysis, args.output_file
+                    )
+                
+                print(f"\n✅ Recommendations exported to JSON: {export_path}")
     
     except KeyboardInterrupt:
         print("\n\n⏹️  AI/ML operation cancelled by user")
@@ -1100,6 +1866,7 @@ EXAMPLES:
         print("3. Check your API keys and network connectivity")
         print("4. Try a different artist tier range")
         print("5. Use --verbose for detailed AI/ML process information")
+        print("6. Try --list-artists to explore your artist tiers first")
         
         sys.exit(1)
 
