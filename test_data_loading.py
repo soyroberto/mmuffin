@@ -7,7 +7,7 @@ from pathlib import Path
 
 def test_data_loading():
     """Test loading Spotify data files"""
-    data_dir = Path("/Users/roberto/OneDrive/Azure/Spotify/spai").expanduser()
+    data_dir = Path("./data/spotify").expanduser()
     
     if not data_dir.exists():
         print(f"Error: Data directory {data_dir} does not exist")

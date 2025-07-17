@@ -21,7 +21,7 @@ import argparse
 # Import the secure configuration system
 from secrets_encryption_system import SecureConfigManager, SecureConfigLoader
 
-# Import the fixed recommendation system
+# Import the fixed recommendation system / Removed the fixed_ prefix
 #from fixed_recommendation_prototype import HybridMusicRecommender, SpotifyDataProcessor, ContentBasedRecommender
 from recommendation_prototype import HybridMusicRecommender, SpotifyDataProcessor, ContentBasedRecommender
 
