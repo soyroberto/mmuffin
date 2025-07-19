@@ -1,0 +1,63 @@
+# 🎵 Music Recommendation System - Streamlit Web Application Requirements
+# This file contains all dependencies needed to run the web application
+
+# Core Streamlit and Web Framework
+streamlit>=1.28.0
+streamlit-option-menu>=0.3.6
+
+# Data Processing and Analysis
+pandas>=2.0.0
+numpy>=1.24.0
+
+# Machine Learning Libraries
+scikit-learn>=1.3.0
+
+# Visualization
+plotly>=5.15.0
+
+# API and Web Requests
+requests>=2.31.0
+beautifulsoup4>=4.12.0
+
+# Security and Configuration
+cryptography>=41.0.0
+python-dotenv>=1.0.0
+
+# File and Path Handling
+pathlib2>=2.3.7
+
+# Date and Time Processing
+python-dateutil>=2.8.2
+
+# JSON Processing (built-in, but ensuring compatibility)
+# json - built-in Python module
+
+# Optional: Enhanced UI Components
+streamlit-aggrid>=0.3.4
+streamlit-plotly-events>=0.1.6
+
+# Development and Testing (optional)
+pytest>=7.4.0
+pytest-streamlit>=0.1.0
+
+# Deployment Dependencies
+watchdog>=3.0.0  # For file watching in development
+click>=8.1.0     # Command line interface support
+
+# Performance Optimization
+numba>=0.57.0    # Optional: for numerical computations acceleration
+
+# Additional Utilities
+tqdm>=4.65.0     # Progress bars for data processing
+colorama>=0.4.6  # Colored terminal output
+
+# Memory Management
+psutil>=5.9.0    # System and process utilities
+
+# Caching (Streamlit built-in, but ensuring compatibility)
+# streamlit-cache - included in streamlit
+
+# Note: Some packages may have different version requirements
+# Run: pip install -r requirements_streamlit.txt
+# For development: pip install -r requirements_streamlit.txt --upgrade
+

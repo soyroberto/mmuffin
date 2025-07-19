@@ -1,0 +1,56 @@
+# 🎵 Music Recommendation System - Streamlit Web Application Requirements (Fixed)
+# This file contains all dependencies with compatible versions
+
+# Core Streamlit and Web Framework
+streamlit>=1.28.0,<2.0.0
+streamlit-option-menu>=0.3.6,<1.0.0
+
+# Data Processing and Analysis
+pandas>=1.5.0,<3.0.0
+numpy>=1.21.0,<2.0.0
+
+# Machine Learning Libraries
+scikit-learn>=1.1.0,<2.0.0
+
+# Visualization
+plotly>=5.10.0,<6.0.0
+
+# API and Web Requests
+requests>=2.28.0,<3.0.0
+beautifulsoup4>=4.11.0,<5.0.0
+
+# Security and Configuration
+cryptography>=3.4.0,<42.0.0
+python-dotenv>=0.19.0,<2.0.0
+
+# Date and Time Processing
+python-dateutil>=2.8.0,<3.0.0
+
+# Optional: Enhanced UI Components (using compatible versions)
+streamlit-aggrid>=0.3.0,<1.0.0
+
+# Development and Testing (optional)
+pytest>=7.0.0,<8.0.0
+
+# Deployment Dependencies
+watchdog>=2.1.0,<4.0.0
+click>=8.0.0,<9.0.0
+
+# Performance Optimization (optional)
+numba>=0.56.0,<1.0.0
+
+# Additional Utilities
+tqdm>=4.60.0,<5.0.0
+colorama>=0.4.4,<1.0.0
+
+# Memory Management
+psutil>=5.8.0,<6.0.0
+
+# Note: Removed incompatible packages:
+# - streamlit-plotly-events (not available in required version)
+# - pathlib2 (not needed for Python 3.8+)
+# - pytest-streamlit (not essential for deployment)
+
+# Installation command:
+# pip install -r requirements_streamlit_fixed.txt
+

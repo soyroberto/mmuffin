@@ -1,0 +1,123 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mxfile host="app.diagrams.net" modified="2025-01-17T00:00:00.000Z" agent="5.0" etag="draw.io-diagram" version="24.7.17">
+  <diagram name="Music-Recommendation-Architecture" id="music-rec-arch">
+    <mxGraphModel dx="1422" dy="794" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1654" pageHeight="1169" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        
+        <!-- Title -->
+        <mxCell id="title" value="🎵 Hybrid AI/ML Music Recommendation System Architecture" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=20;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="527" y="20" width="600" height="30" as="geometry" />
+        </mxCell>
+        
+        <!-- Data Input Layer -->
+        <mxCell id="data-input" value="📁 Spotify JSON Files&lt;br&gt;Audio_2012.json, Audio_2013.json, etc.&lt;br&gt;&lt;b&gt;Raw listening history data&lt;/b&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="727" y="80" width="200" height="80" as="geometry" />
+        </mxCell>
+        
+        <!-- Data Processing Pipeline -->
+        <mxCell id="data-processing" value="🔧 Data Processing Pipeline&lt;br&gt;&lt;b&gt;Library:&lt;/b&gt; pandas&lt;br&gt;&lt;b&gt;Features:&lt;/b&gt; engagement_score, hours_played&lt;br&gt;&lt;b&gt;Methods:&lt;/b&gt; Data cleaning, feature engineering" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="677" y="200" width="300" height="80" as="geometry" />
+        </mxCell>
+        
+        <!-- Content-Based Filtering Engine -->
+        <mxCell id="content-engine" value="🎯 Content-Based Filtering Engine&lt;br&gt;&lt;br&gt;&lt;b&gt;External API:&lt;/b&gt; Last.fm Knowledge Graph&lt;br&gt;&lt;b&gt;Algorithm:&lt;/b&gt; Cosine Similarity + Artist Tier Selection&lt;br&gt;&lt;b&gt;Libraries:&lt;/b&gt; requests, beautifulsoup4&lt;br&gt;&lt;b&gt;Math:&lt;/b&gt; Weighted Linear Combination&lt;br&gt;&lt;b&gt;Formula:&lt;/b&gt; score = 0.4×engagement + 0.3×avg_engagement + 0.2×log(plays) + 0.1×log(hours)&lt;br&gt;&lt;b&gt;Input:&lt;/b&gt; Artist Tier Range (e.g., 200-300)&lt;br&gt;&lt;b&gt;Output:&lt;/b&gt; Similar Artists with Recommendation Scores" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=10;align=left;" vertex="1" parent="1">
+          <mxGeometry x="40" y="320" width="320" height="160" as="geometry" />
+        </mxCell>
+        
+        <!-- Temporal Collaborative Filtering Engine -->
+        <mxCell id="temporal-engine" value="🕒 Temporal Collaborative Filtering Engine&lt;br&gt;&lt;br&gt;&lt;b&gt;Algorithm:&lt;/b&gt; Non-Negative Matrix Factorization (NMF)&lt;br&gt;&lt;b&gt;Libraries:&lt;/b&gt; scikit-learn, numpy&lt;br&gt;&lt;b&gt;Math:&lt;/b&gt; Matrix Decomposition, Time-Series Analysis&lt;br&gt;&lt;b&gt;Formula:&lt;/b&gt; V ≈ W × H (where V=artist-time matrix)&lt;br&gt;&lt;b&gt;Methods:&lt;/b&gt; Linear Regression for trend analysis&lt;br&gt;&lt;b&gt;Input:&lt;/b&gt; Artist-Time Preference Matrix&lt;br&gt;&lt;b&gt;Output:&lt;/b&gt; Future Preference Predictions" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=10;align=left;" vertex="1" parent="1">
+          <mxGeometry x="400" y="320" width="320" height="160" as="geometry" />
+        </mxCell>
+        
+        <!-- Context-Aware Filtering Engine -->
+        <mxCell id="context-engine" value="📅 Context-Aware Filtering Engine&lt;br&gt;&lt;br&gt;&lt;b&gt;Algorithm:&lt;/b&gt; K-Means Clustering&lt;br&gt;&lt;b&gt;Libraries:&lt;/b&gt; scikit-learn, pandas&lt;br&gt;&lt;b&gt;Math:&lt;/b&gt; Euclidean Distance, Feature Scaling&lt;br&gt;&lt;b&gt;Methods:&lt;/b&gt; Cyclical Encoding for temporal features&lt;br&gt;&lt;b&gt;Features:&lt;/b&gt; hour_sin, hour_cos, day_sin, day_cos&lt;br&gt;&lt;b&gt;Input:&lt;/b&gt; Temporal Context Features&lt;br&gt;&lt;b&gt;Output:&lt;/b&gt; Context-Specific Recommendations" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=10;align=left;" vertex="1" parent="1">
+          <mxGeometry x="760" y="320" width="320" height="160" as="geometry" />
+        </mxCell>
+        
+        <!-- Artist Listing Engine -->
+        <mxCell id="listing-engine" value="📋 Artist Listing &amp; Ranking Engine&lt;br&gt;&lt;br&gt;&lt;b&gt;Algorithm:&lt;/b&gt; Preference Modeling + Ranking&lt;br&gt;&lt;b&gt;Libraries:&lt;/b&gt; pandas, numpy&lt;br&gt;&lt;b&gt;Math:&lt;/b&gt; Weighted Ensemble, Statistical Analysis&lt;br&gt;&lt;b&gt;Methods:&lt;/b&gt; Sorting, Filtering, Search algorithms&lt;br&gt;&lt;b&gt;Input:&lt;/b&gt; Raw Listening Data&lt;br&gt;&lt;b&gt;Output:&lt;/b&gt; Ranked Artist Lists, Search Results" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d0cee2;strokeColor=#56517e;fontSize=10;align=left;" vertex="1" parent="1">
+          <mxGeometry x="1120" y="320" width="320" height="160" as="geometry" />
+        </mxCell>
+        
+        <!-- Hybrid Ensemble Layer -->
+        <mxCell id="ensemble-layer" value="🧠 Hybrid Ensemble Layer&lt;br&gt;&lt;br&gt;&lt;b&gt;Method:&lt;/b&gt; Weighted Combination of Multiple AI/ML Engines&lt;br&gt;&lt;b&gt;Libraries:&lt;/b&gt; numpy for mathematical operations&lt;br&gt;&lt;b&gt;Math:&lt;/b&gt; Ensemble Methods, Score Normalization&lt;br&gt;&lt;b&gt;Algorithm:&lt;/b&gt; final_score = w1×content + w2×temporal + w3×context&lt;br&gt;&lt;b&gt;Purpose:&lt;/b&gt; Combines predictions from all engines for optimal results" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#b1ddf0;strokeColor=#10739e;fontSize=11;align=left;" vertex="1" parent="1">
+          <mxGeometry x="477" y="520" width="500" height="100" as="geometry" />
+        </mxCell>
+        
+        <!-- Output Layer -->
+        <mxCell id="output-layer" value="📤 Output Layer&lt;br&gt;&lt;br&gt;&lt;b&gt;JSON Export System:&lt;/b&gt;&lt;br&gt;• Artist Recommendations with Scores&lt;br&gt;• Comprehensive Analysis Results&lt;br&gt;• Artist Rankings and Statistics&lt;br&gt;• System Metadata and Configuration&lt;br&gt;&lt;br&gt;&lt;b&gt;Libraries:&lt;/b&gt; json, pathlib&lt;br&gt;&lt;b&gt;Formats:&lt;/b&gt; Detailed JSON, Summary JSON" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=11;align=left;" vertex="1" parent="1">
+          <mxGeometry x="577" y="660" width="300" height="140" as="geometry" />
+        </mxCell>
+        
+        <!-- Security Layer -->
+        <mxCell id="security-layer" value="🔐 Security Layer&lt;br&gt;&lt;br&gt;&lt;b&gt;Encrypted Configuration:&lt;/b&gt;&lt;br&gt;• API Key Management&lt;br&gt;• Secure Secret Storage&lt;br&gt;• Multiple Config Methods&lt;br&gt;&lt;br&gt;&lt;b&gt;Libraries:&lt;/b&gt;&lt;br&gt;• cryptography (AES encryption)&lt;br&gt;• python-dotenv (env files)&lt;br&gt;&lt;br&gt;&lt;b&gt;Methods:&lt;/b&gt; AES-256, Base64 encoding" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=10;align=left;" vertex="1" parent="1">
+          <mxGeometry x="1200" y="80" width="240" height="180" as="geometry" />
+        </mxCell>
+        
+        <!-- Mathematical Formulas Box -->
+        <mxCell id="math-formulas" value="📐 Key Mathematical Formulas&lt;br&gt;&lt;br&gt;&lt;b&gt;Preference Score:&lt;/b&gt;&lt;br&gt;P = 0.4×E_total + 0.3×E_avg + 0.2×log(plays) + 0.1×log(hours)&lt;br&gt;&lt;br&gt;&lt;b&gt;Matrix Factorization (NMF):&lt;/b&gt;&lt;br&gt;V ≈ W × H, where V ∈ ℝ^(m×n), W ∈ ℝ^(m×k), H ∈ ℝ^(k×n)&lt;br&gt;&lt;br&gt;&lt;b&gt;Cyclical Encoding:&lt;/b&gt;&lt;br&gt;hour_sin = sin(2π × hour / 24)&lt;br&gt;hour_cos = cos(2π × hour / 24)&lt;br&gt;&lt;br&gt;&lt;b&gt;Cosine Similarity:&lt;/b&gt;&lt;br&gt;sim(A,B) = (A·B) / (||A|| × ||B||)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;fontSize=9;align=left;" vertex="1" parent="1">
+          <mxGeometry x="40" y="80" width="320" height="180" as="geometry" />
+        </mxCell>
+        
+        <!-- Python Libraries Box -->
+        <mxCell id="python-libraries" value="🐍 Python Libraries &amp; Justification&lt;br&gt;&lt;br&gt;&lt;b&gt;Core ML/AI:&lt;/b&gt;&lt;br&gt;• scikit-learn: Industry standard for ML algorithms&lt;br&gt;• numpy: Optimized numerical computations&lt;br&gt;• pandas: Efficient data manipulation&lt;br&gt;&lt;br&gt;&lt;b&gt;External APIs:&lt;/b&gt;&lt;br&gt;• requests: HTTP client for API calls&lt;br&gt;• beautifulsoup4: HTML parsing for web scraping&lt;br&gt;&lt;br&gt;&lt;b&gt;Security:&lt;/b&gt;&lt;br&gt;• cryptography: Military-grade encryption&lt;br&gt;• python-dotenv: Environment variable management&lt;br&gt;&lt;br&gt;&lt;b&gt;Data Export:&lt;/b&gt;&lt;br&gt;• json: Native JSON serialization&lt;br&gt;• pathlib: Modern file path handling" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e6f3ff;strokeColor=#4d94ff;fontSize=9;align=left;" vertex="1" parent="1">
+          <mxGeometry x="1200" y="320" width="240" height="240" as="geometry" />
+        </mxCell>
+        
+        <!-- Arrows and Connections -->
+        <mxCell id="arrow1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" edge="1" parent="1" source="data-input" target="data-processing">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        
+        <mxCell id="arrow2" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=0.2;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" edge="1" parent="1" source="data-processing" target="content-engine">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        
+        <mxCell id="arrow3" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" edge="1" parent="1" source="data-processing" target="temporal-engine">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        
+        <mxCell id="arrow4" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=0.8;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" edge="1" parent="1" source="data-processing" target="context-engine">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        
+        <mxCell id="arrow5" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=1;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" edge="1" parent="1" source="data-processing" target="listing-engine">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        
+        <mxCell id="arrow6" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.2;entryY=0;entryDx=0;entryDy=0;" edge="1" parent="1" source="content-engine" target="ensemble-layer">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        
+        <mxCell id="arrow7" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" edge="1" parent="1" source="temporal-engine" target="ensemble-layer">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        
+        <mxCell id="arrow8" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.8;entryY=0;entryDx=0;entryDy=0;" edge="1" parent="1" source="context-engine" target="ensemble-layer">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        
+        <mxCell id="arrow9" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" edge="1" parent="1" source="ensemble-layer" target="output-layer">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        
+        <mxCell id="arrow10" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=0;exitY=0.5;exitDx=0;exitDy=0;entryX=1;entryY=0.5;entryDx=0;entryDy=0;dashed=1;" edge="1" parent="1" source="security-layer" target="data-processing">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        
+        <mxCell id="arrow11" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=0.2;exitY=1;exitDx=0;exitDy=0;entryX=1;entryY=0.5;entryDx=0;entryDy=0;dashed=1;" edge="1" parent="1" source="listing-engine" target="output-layer">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        
+        <!-- Legend -->
+        <mxCell id="legend" value="📖 Legend&lt;br&gt;&lt;br&gt;🎯 AI/ML Engines&lt;br&gt;🔧 Data Processing&lt;br&gt;📤 Output Systems&lt;br&gt;🔐 Security Components&lt;br&gt;📐 Mathematical Methods&lt;br&gt;🐍 Python Libraries&lt;br&gt;&lt;br&gt;Solid arrows: Data flow&lt;br&gt;Dashed arrows: Configuration" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f0f0f0;strokeColor=#999999;fontSize=10;align=left;" vertex="1" parent="1">
+          <mxGeometry x="40" y="660" width="200" height="140" as="geometry" />
+        </mxCell>
+        
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>
+
