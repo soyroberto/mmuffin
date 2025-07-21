@@ -3,10 +3,11 @@
 🎵 Personal Music Recommendation System - Final Fixed Streamlit Web Application
 
 This is a robust web interface for the hybrid AI/ML music recommendation system.
-Features automatic data loading with proper session state management to prevent data loss.
+Features automatic data loading with proper session state management and fixed tier input validation.
 
 FINAL FIXED VERSION:
 - Proper session state management to prevent data loss on interactions
+- Fixed tier input validation that doesn't break on value changes
 - Automatic loading of ALL Spotify data from data/spotify folder
 - Real API connectivity validation to Last.fm
 - Single-page interface with recommendations on main page
@@ -130,6 +131,15 @@ st.markdown("""
         margin: 0.3rem 0;
     }
     
+    .status-warning {
+        background: #fff3cd;
+        border: 1px solid #ffeaa7;
+        color: #856404;
+        padding: 0.5rem;
+        border-radius: 6px;
+        margin: 0.3rem 0;
+    }
+    
     .stAlert > div {
         border-radius: 8px;
     }
@@ -185,6 +195,11 @@ def initialize_session_state():
         st.session_state.initialization_complete = False
     if 'spotify_dataframe' not in st.session_state:
         st.session_state.spotify_dataframe = None
+    # Initialize tier values with defaults
+    if 'tier_start' not in st.session_state:
+        st.session_state.tier_start = 1
+    if 'tier_end' not in st.session_state:
+        st.session_state.tier_end = 50
 
 # Call initialization immediately
 initialize_session_state()
@@ -451,25 +466,54 @@ def get_artist_songs(artist_name: str, df: pd.DataFrame, min_songs: int = 3, max
         return []
 
 def render_sidebar():
-    """Render the simplified sidebar with only essential controls"""
+    """Render the simplified sidebar with fixed tier input validation"""
     st.sidebar.markdown("## 🧠 AI/ML Settings")
     
-    # Artist tier selection
+    # Artist tier selection - FIXED VERSION without dynamic constraints
+    # Use session state to manage values and avoid validation conflicts
+    
+    # Tier Start input - no max constraint to avoid conflicts
     tier_start = st.sidebar.number_input(
         "🎯 Artist Tier Start",
         min_value=1,
         max_value=10000,
-        value=1,
-        help="Starting rank for artist tier selection"
+        value=st.session_state.tier_start,
+        step=1,
+        help="Starting rank for artist tier selection",
+        key="tier_start_input"
     )
     
+    # Tier End input - no min constraint to avoid conflicts
     tier_end = st.sidebar.number_input(
-        "🎯 Artist Tier End",
-        min_value=tier_start,
+        "🎯 Artist Tier End", 
+        min_value=1,
         max_value=10000,
-        value=50,
-        help="Ending rank for artist tier selection"
+        value=st.session_state.tier_end,
+        step=1,
+        help="Ending rank for artist tier selection",
+        key="tier_end_input"
     )
+    
+    # Update session state values
+    st.session_state.tier_start = tier_start
+    st.session_state.tier_end = tier_end
+    
+    # Validate and fix the range if needed
+    if tier_start > tier_end:
+        st.sidebar.markdown("""
+        <div class="status-warning">
+            ⚠️ Start value is greater than end value. Will use start value as both start and end.
+        </div>
+        """, unsafe_allow_html=True)
+        # Auto-fix: use the larger value for both
+        tier_end = tier_start
+        st.session_state.tier_end = tier_end
+    
+    # Show the effective range being used
+    if tier_start != tier_end:
+        st.sidebar.info(f"🎯 Using artist tier range: {tier_start} to {tier_end}")
+    else:
+        st.sidebar.info(f"🎯 Using single artist tier: {tier_start}")
     
     # Number of recommendations
     num_recs = st.sidebar.slider(
@@ -552,7 +596,7 @@ def render_main_header():
     st.markdown("""
     <div style="text-align: center; margin-bottom: 2rem;">
         <p style="font-size: 1.2rem; color: #666;">
-            Final Fixed Version - Persistent Data Across All Interactions
+            Final Fixed Version - No More Input Validation Errors
         </p>
     </div>
     """, unsafe_allow_html=True)
@@ -774,10 +818,13 @@ def generate_recommendations(config):
             
             artist_stats = artist_stats.sort_values('preference_score', ascending=False).reset_index(drop=True)
             
-            # Select tier artists
+            # Select tier artists - handle the case where start > end
+            tier_start = min(config['tier_start'], config['tier_end'])
+            tier_end = max(config['tier_start'], config['tier_end'])
+            
             tier_mask = (
-                (artist_stats.index >= config['tier_start'] - 1) & 
-                (artist_stats.index < config['tier_end'])
+                (artist_stats.index >= tier_start - 1) & 
+                (artist_stats.index < tier_end)
             )
             tier_artists = artist_stats[tier_mask]['artist'].tolist()
             
@@ -825,8 +872,8 @@ def generate_recommendations(config):
             st.session_state.recommendations = {
                 'content_based': recommendations[:config['num_recs']],
                 'tier_info': {
-                    'start': config['tier_start'],
-                    'end': config['tier_end'],
+                    'start': tier_start,
+                    'end': tier_end,
                     'total_artists': len(artist_stats),
                     'tier_artists': len(tier_artists)
                 },
@@ -921,7 +968,7 @@ def export_recommendations_json():
             'export_metadata': {
                 'timestamp': datetime.now().isoformat(),
                 'export_type': 'music_recommendations_final_fixed',
-                'system_version': '2.4_streamlit_final_fixed'
+                'system_version': '2.5_streamlit_final_fixed_tier_validation'
             },
             'recommendations': st.session_state.recommendations,
             'analysis': st.session_state.analysis_results
@@ -1026,14 +1073,15 @@ def main():
         st.markdown("""
         ## 🎵 About This System (Final Fixed Version)
         
-        This is a **Final Fixed Hybrid AI/ML Music Recommendation System** with persistent data management.
+        This is a **Final Fixed Hybrid AI/ML Music Recommendation System** with resolved tier input validation.
         
-        ### 🔧 Final Fixes Applied
+        ### 🔧 Latest Fixes Applied
         
-        1. **Persistent Data**: Data now persists across ALL Streamlit interactions
-        2. **Session State Management**: Proper handling of data loading and storage
-        3. **No More Errors**: Fixed "No data found" errors on button clicks and slider changes
-        4. **Robust Architecture**: Data loads once and stays loaded throughout the session
+        1. **Fixed Tier Input Validation**: No more crashes when changing tier values
+        2. **Removed Dynamic Constraints**: Tier inputs no longer have conflicting min/max values
+        3. **Auto-Range Correction**: System automatically handles invalid ranges
+        4. **Persistent Data**: Data persists across ALL Streamlit interactions
+        5. **Session State Management**: Proper handling of all user inputs
         
         ### 🚀 Features
         
@@ -1041,8 +1089,8 @@ def main():
         2. **Real API Validation**: Only shows green status when Last.fm API is actually connected
         3. **Single-Page Interface**: Data overview and recommendations on the same page
         4. **No Year Selection**: Includes all available data for comprehensive analysis
-        5. **Essential Controls Only**: Just tier selection and recommend button
-        6. **Persistent Operation**: No data loss on any interaction
+        5. **Flexible Tier Selection**: Enter any values without validation conflicts
+        6. **Robust Operation**: No crashes on any interaction
         
         ### 🧠 AI/ML Engines
         
@@ -1055,7 +1103,7 @@ def main():
         
         ```
         your-project/
-        ├── viewmusic_fixed_final.py    # This final fixed app
+        ├── viewmusic_final_fixed.py    # This final fixed app
         ├── data/spotify/               # Your Spotify data (auto-loaded)
         │   ├── Streaming_History_Audio_2013-2014_1.json
         │   ├── Streaming_History_Audio_2014-2016_2.json
@@ -1069,26 +1117,28 @@ def main():
         ### 🎯 How to Use
         
         1. **Automatic Setup**: App loads all data and validates API on startup
-        2. **Interact Freely**: Click buttons, move sliders, search artists - data persists
-        3. **Configure Settings**: Adjust artist tier and recommendation count
+        2. **Set Tier Range**: Enter any start/end values - system handles validation
+        3. **Interact Freely**: All inputs work without crashes or conflicts
         4. **Click Recommend**: Get instant AI-powered music recommendations
         5. **View Results**: See recommendations with 3-5 songs per artist
         6. **Export Data**: Download JSON or copy results for further analysis
         
-        ### ✅ Fixed Issues
+        ### ✅ All Issues Resolved
         
+        - **✅ No more tier input validation crashes**
+        - **✅ No more "value is less than min_value" errors**
         - **✅ No more "No data found" errors on interactions**
-        - **✅ Data persists across all button clicks and slider changes**
-        - **✅ Proper session state management**
+        - **✅ Data persists across all interactions**
+        - **✅ Flexible tier range selection**
         - **✅ Robust error handling and recovery**
         - **✅ Consistent performance across all features**
         
         ---
         
         **Created by**: Roberto's AI Music Recommendation System  
-        **Version**: 2.4 (Final Fixed)  
+        **Version**: 2.5 (Final Fixed - Tier Validation Resolved)  
         **GitHub**: [soyroberto/streamlit](https://github.com/soyroberto/streamlit)  
-        **Status**: Production Ready - All Issues Resolved
+        **Status**: Production Ready - All Critical Issues Resolved
         """)
 
 if __name__ == "__main__":
