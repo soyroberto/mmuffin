@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
 """
-🎵 Personal Music Recommendation System - Simple Songs List Streamlit Web Application
+🎵 Personal Music Recommendation System - Clean Recommendations Streamlit Web Application
 
-This version features clean recommendation formatting with simple numbered song lists.
+This version features clean recommendation formatting with top tracks in tables and album artwork.
 Features automatic data loading with proper session state management, tier range visualization with ranks, and tier-filtered chart display.
 
-SIMPLE SONGS VERSION:
-- Clean artist recommendation display (no images, no tables)
-- Top 5 songs per artist in numbered list format
-- No album references or artwork
+CLEAN RECOMMENDATIONS VERSION:
+- Clean artist recommendation display (no messy JSON output)
+- Top 5 songs per artist using Last.fm API
+- Songs displayed in formatted tables with album artwork
 - Chart shows ONLY artists within the selected tier range
 - Artist ranks displayed on the left side of the chart
 - Data overview metrics reflect only the selected tier range
@@ -112,29 +112,52 @@ st.markdown("""
         padding-bottom: 0.5rem;
     }
     
-    .song-list {
+    .song-table {
+        width: 100%;
+        border-collapse: collapse;
+        margin: 1rem 0;
         background: white;
         border-radius: 8px;
-        padding: 1rem;
-        margin: 1rem 0;
+        overflow: hidden;
         box-shadow: 0 2px 8px rgba(0,0,0,0.1);
     }
     
-    .song-item {
-        padding: 0.5rem 0;
-        border-bottom: 1px solid #e9ecef;
-        font-size: 1rem;
-        color: #333;
-    }
-    
-    .song-item:last-child {
-        border-bottom: none;
-    }
-    
-    .song-number {
+    .song-table th {
+        background: linear-gradient(135deg, #1DB954 0%, #1ed760 100%);
+        color: white;
+        padding: 12px;
+        text-align: left;
         font-weight: bold;
-        color: #1DB954;
-        margin-right: 0.5rem;
+    }
+    
+    .song-table td {
+        padding: 12px;
+        border-bottom: 1px solid #e9ecef;
+        vertical-align: middle;
+    }
+    
+    .song-table tr:hover {
+        background-color: #f8f9fa;
+    }
+    
+    .album-image {
+        width: 50px;
+        height: 50px;
+        border-radius: 6px;
+        object-fit: cover;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+    }
+    
+    .song-name {
+        font-weight: 600;
+        color: #333;
+        font-size: 1rem;
+    }
+    
+    .album-name {
+        color: #666;
+        font-size: 0.9rem;
+        font-style: italic;
     }
     
     .recommend-button {
@@ -315,13 +338,13 @@ def validate_lastfm_api():
     except Exception as e:
         return False
 
-def get_top_tracks_simple(artist, api_key, limit=5):
+def get_top_tracks_with_albums(artist, api_key, limit=5):
     """
-    Get top tracks for an artist - SIMPLIFIED VERSION (no images, no albums)
-    Based on the user's working code but returns only song names
+    Get top tracks for an artist with album information and artwork using Last.fm API
+    Based on the user's working code but enhanced with album info
     """
     try:
-        # Get top tracks using the user's proven API structure
+        # Get top tracks
         url = f"http://ws.audioscrobbler.com/2.0/?method=artist.gettoptracks&artist={artist}&api_key={api_key}&format=json&limit={limit}"
         response = requests.get(url, timeout=10)
         
@@ -337,14 +360,52 @@ def get_top_tracks_simple(artist, api_key, limit=5):
         if not isinstance(tracks, list):
             tracks = [tracks]  # Handle single track response
         
-        # Extract only song names - NO IMAGES, NO ALBUMS
         top_tracks = []
         for track in tracks:
             track_name = track.get('name', 'Unknown Track')
-            if track_name and track_name != 'Unknown Track':
-                top_tracks.append(track_name)
+            album_name = track.get('album', {}).get('#text', 'Unknown Album') if isinstance(track.get('album'), dict) else 'Unknown Album'
+            
+            # Get album artwork - try to get the largest available image
+            album_image = None
+            if 'image' in track:
+                images = track['image']
+                if isinstance(images, list):
+                    # Find the largest image (prefer 'large' or 'extralarge')
+                    for img in reversed(images):  # Start from largest
+                        if img.get('#text') and img.get('#text').strip():
+                            album_image = img['#text']
+                            break
+            
+            # Fallback: try to get album info separately if no image
+            if not album_image or album_image == '':
+                try:
+                    album_url = f"http://ws.audioscrobbler.com/2.0/?method=album.getinfo&artist={artist}&album={album_name}&api_key={api_key}&format=json"
+                    album_response = requests.get(album_url, timeout=5)
+                    if album_response.status_code == 200:
+                        album_data = album_response.json()
+                        if 'album' in album_data and 'image' in album_data['album']:
+                            album_images = album_data['album']['image']
+                            if isinstance(album_images, list):
+                                for img in reversed(album_images):
+                                    if img.get('#text') and img.get('#text').strip():
+                                        album_image = img['#text']
+                                        break
+                except:
+                    pass  # Continue without album image
+            
+            # Use a default image if none found
+            if not album_image or album_image == '':
+                album_image = "https://lastfm.freetls.fastly.net/i/u/174s/2a96cbd8b46e442fc41c2b86b821562f.png"
+            
+            top_tracks.append({
+                'name': track_name,
+                'album': album_name,
+                'image': album_image,
+                'playcount': track.get('playcount', '0'),
+                'listeners': track.get('listeners', '0')
+            })
         
-        return top_tracks[:limit]  # Return only the song names
+        return top_tracks
         
     except Exception as e:
         # Return empty list if API call fails
@@ -751,7 +812,7 @@ def render_main_header():
     st.markdown("""
     <div style="text-align: center; margin-bottom: 2rem;">
         <p style="font-size: 1.2rem; color: #666;">
-            Simple Songs Version - Clean Numbered Lists
+            Clean Recommendations Version - Top Songs in Tables with Album Artwork
         </p>
     </div>
     """, unsafe_allow_html=True)
@@ -1246,14 +1307,14 @@ def generate_recommendations(config):
                 except Exception as e:
                     continue
             
-            status_text.text("Getting top songs (simplified)...")
+            status_text.text("Getting top tracks with album artwork...")
             progress_bar.progress(0.9)
             
-            # Add simple song lists for each recommended artist
+            # Add top tracks with album information for each recommended artist
             for rec in recommendations:
-                # Get simple song names only (no images, no albums)
-                songs = get_top_tracks_simple(rec['artist'], api_key, limit=5)
-                rec['songs'] = songs  # Just a list of song names
+                # Get top tracks with album artwork using the enhanced function
+                tracks_with_albums = get_top_tracks_with_albums(rec['artist'], api_key, limit=5)
+                rec['tracks'] = tracks_with_albums
             
             progress_bar.progress(1.0)
             status_text.text("✅ Recommendations generated successfully!")
@@ -1277,7 +1338,7 @@ def generate_recommendations(config):
         st.error("Please check your API configuration and network connection.")
 
 def display_recommendations():
-    """Display the generated recommendations in a simple format with numbered song lists"""
+    """Display the generated recommendations in a beautiful format with track tables"""
     recommendations = st.session_state.recommendations
     
     st.markdown("## 🎵 Your AI-Generated Music Recommendations")
@@ -1293,7 +1354,7 @@ def display_recommendations():
         st.warning("No recommendations generated. Please try different settings or check your API configuration.")
         return
     
-    # Display recommendations in simple cards with numbered song lists
+    # Display recommendations in beautiful cards with track tables
     for i, rec in enumerate(content_recs, 1):
         with st.container():
             # Artist header with score
@@ -1306,27 +1367,66 @@ def display_recommendations():
             </div>
             """, unsafe_allow_html=True)
             
-            # Display songs in a simple numbered list
-            songs = rec.get('songs', [])
-            if songs:
+            # Display tracks in a formatted table
+            tracks = rec.get('tracks', [])
+            if tracks:
                 st.markdown("### 🎵 Top Songs")
                 
-                # Create simple numbered list HTML
-                song_list_html = '<div class="song-list">'
+                # Create HTML table for better formatting
+                table_html = """
+                <table class="song-table">
+                    <thead>
+                        <tr>
+                            <th style="width: 60px;">Album</th>
+                            <th>Song</th>
+                            <th>Album</th>
+                            <th style="width: 100px;">Plays</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                """
                 
-                for j, song in enumerate(songs, 1):
-                    song_list_html += f"""
-<div class="song-item">
-    <span class="song-number">{j}.</span>{song}
-</div>
-"""
+                for track in tracks:
+                    # Format play count
+                    playcount = track.get('playcount', '0')
+                    try:
+                        playcount_int = int(playcount)
+                        if playcount_int >= 1000000:
+                            playcount_display = f"{playcount_int/1000000:.1f}M"
+                        elif playcount_int >= 1000:
+                            playcount_display = f"{playcount_int/1000:.1f}K"
+                        else:
+                            playcount_display = f"{playcount_int:,}"
+                    except:
+                        playcount_display = playcount
+                    
+                    table_html += f"""
+                        <tr>
+                            <td>
+                                <img src="{track.get('image', '')}" 
+                                     alt="Album Art" 
+                                     class="album-image"
+                                     onerror="this.src='https://lastfm.freetls.fastly.net/i/u/174s/2a96cbd8b46e442fc41c2b86b821562f.png'">
+                            </td>
+                            <td>
+                                <div class="song-name">{track.get('name', 'Unknown Track')}</div>
+                            </td>
+                            <td>
+                                <div class="album-name">{track.get('album', 'Unknown Album')}</div>
+                            </td>
+                            <td>{playcount_display}</td>
+                        </tr>
+                    """
                 
-                song_list_html += '</div>'
+                table_html += """
+                    </tbody>
+                </table>
+                """
                 
-                st.markdown(song_list_html, unsafe_allow_html=True)
+                st.markdown(table_html, unsafe_allow_html=True)
                 
             else:
-                st.markdown("*No song information available from Last.fm*")
+                st.markdown("*No track information available from Last.fm*")
             
             # Show source artist if available
             if 'source_artist' in rec:
@@ -1360,8 +1460,8 @@ def export_recommendations_json():
         export_data = {
             'export_metadata': {
                 'timestamp': datetime.now().isoformat(),
-                'export_type': 'music_recommendations_simple_songs',
-                'system_version': '3.0_streamlit_simple_songs'
+                'export_type': 'music_recommendations_clean_format',
+                'system_version': '2.9_streamlit_clean_recommendations'
             },
             'recommendations': st.session_state.recommendations,
             'analysis': st.session_state.analysis_results
@@ -1395,7 +1495,7 @@ def export_summary_json():
                 {
                     'artist': rec['artist'],
                     'score': rec['recommendation_score'],
-                    'songs': rec.get('songs', [])
+                    'tracks': [track.get('name', 'Unknown') for track in rec.get('tracks', [])]
                 }
                 for rec in recs[:10]
             ]
@@ -1425,11 +1525,13 @@ def copy_recommendations_to_clipboard():
         
         for i, rec in enumerate(recs, 1):
             text_output += f"{i}. {rec['artist']} (Score: {rec['recommendation_score']:.3f})\n"
-            songs = rec.get('songs', [])
-            if songs:
+            tracks = rec.get('tracks', [])
+            if tracks:
                 text_output += "   Top Songs:\n"
-                for j, song in enumerate(songs, 1):
-                    text_output += f"   {j}. {song}\n"
+                for track in tracks:
+                    track_name = track.get('name', 'Unknown Track')
+                    album_name = track.get('album', 'Unknown Album')
+                    text_output += f"   🎵 {track_name} - {album_name}\n"
             text_output += "\n"
         
         st.text_area(
@@ -1465,81 +1567,68 @@ def main():
     
     with tab3:
         st.markdown("""
-        ## 🎵 About This System (Simple Songs Version)
+        ## 🎵 About This System (Clean Recommendations Version)
         
-        This is a **Simple Songs Hybrid AI/ML Music Recommendation System** with clean numbered song lists.
+        This is a **Clean Recommendations Hybrid AI/ML Music Recommendation System** with beautiful track tables and album artwork.
         
         ### 🆕 Latest Enhancement
         
-        **Simple Song Lists**: Clean and minimal display format:
-        - **No images or album artwork** - removed all visual clutter
-        - **No tables** - simple numbered lists instead
-        - **No album references** - just song names
-        - **Clean formatting** - artist name with numbered songs below
-        - **Minimal design** - focus on the music, not the visuals
+        **Clean Recommendation Display**: No more messy JSON output! Recommendations now show:
+        - **Clean artist names** (no dictionary objects)
+        - **Top 5 songs per artist** using Last.fm API
+        - **Beautiful track tables** with album artwork
+        - **Formatted play counts** (1.2M, 45K, etc.)
+        - **Professional styling** with hover effects
         
-        ### 🎯 Display Format
+        ### 🎯 Key Features
+        
+        - **Clean Artist Display**: Just artist names, no messy data structures
+        - **Track Tables**: Professional tables with album artwork, song names, albums, and play counts
+        - **Album Artwork**: High-quality images from Last.fm API
+        - **Responsive Design**: Tables work on all screen sizes
+        - **Error Handling**: Graceful fallbacks for missing images or data
+        - **Performance Optimized**: Efficient API calls and caching
+        
+        ### 📊 Track Table Format
         
         Each recommended artist shows:
         ```
-        #1: Artist Name                                    Score: 0.950
-        
         🎵 Top Songs
-        1. Song Name One
-        2. Song Name Two  
-        3. Song Name Three
-        4. Song Name Four
-        5. Song Name Five
-        
-        💡 Recommended because you listen to: Source Artist
+        [Album Art] | Song Name        | Album Name      | Plays
+        [Image]     | Bohemian Rhapsody| A Night at Opera| 1.2M
+        [Image]     | We Will Rock You | News of World   | 890K
         ```
         
-        ### ✅ What's Removed
+        ### 🎨 Visual Improvements
         
-        - ❌ **Album artwork and images** - no more loading issues
-        - ❌ **Album names and references** - simplified display
-        - ❌ **Complex tables** - replaced with simple lists
-        - ❌ **Play count columns** - focus on song discovery
-        - ❌ **Visual clutter** - clean, minimal interface
+        - **Professional Cards**: Clean, bordered recommendation cards
+        - **Color-Coded Scores**: Gradient score badges
+        - **Hover Effects**: Interactive table rows
+        - **Consistent Styling**: Spotify-inspired color scheme
+        - **Mobile Friendly**: Responsive design for all devices
         
-        ### ✅ What's Preserved
+        ### 🔧 Technical Implementation
         
-        - ✅ **Clean artist names** - no messy JSON output
-        - ✅ **Top 5 songs per artist** - using Last.fm API
-        - ✅ **Numbered lists** - easy to read format
-        - ✅ **Recommendation scores** - AI confidence levels
-        - ✅ **Source attribution** - why each artist was recommended
-        - ✅ **All AI/ML functionality** - same powerful algorithms
+        **Last.fm API Integration**:
+        ```python
+        def get_top_tracks_with_albums(artist, api_key, limit=5):
+            # Get top tracks with album information
+            # Extract clean artist names from API responses
+            # Fetch album artwork from multiple sources
+            # Format play counts for readability
+        ```
         
-        ### 🎨 Design Philosophy
+        **Clean Data Processing**:
+        - Removes messy JSON dictionary outputs
+        - Extracts clean artist names from API responses
+        - Handles missing images with fallbacks
+        - Formats large numbers for readability
         
-        **Minimal and Clean**:
-        - Focus on music discovery, not visual elements
-        - Fast loading with no image dependencies
-        - Simple, readable format that works everywhere
-        - Clean typography with clear hierarchy
-        - Spotify-inspired color scheme maintained
-        
-        ### 🔧 Technical Benefits
-        
-        **Performance**:
-        - Faster loading (no image requests)
-        - Lower bandwidth usage
-        - Better mobile experience
-        - Simplified API calls
-        - Reduced complexity
-        
-        **Reliability**:
-        - No broken image links
-        - No album artwork loading failures
-        - Consistent display across all devices
-        - Simplified error handling
-        
-        ### 🚀 Everything Else Unchanged
+        ### 🚀 Everything Else Preserved
         
         - **Tier-Filtered Chart**: Shows only selected artists
         - **Data Overview**: Metrics reflect tier-specific data
-        - **Sidebar Controls**: All settings remain the same
+        - **Sidebar Controls**: All settings remain unchanged
         - **Artist Search**: Full search functionality
         - **Export Options**: JSON and summary exports
         - **AI/ML Engine**: Same hybrid recommendation algorithms
@@ -1547,9 +1636,9 @@ def main():
         ---
         
         **Created by**: Roberto's AI Music Recommendation System  
-        **Version**: 3.0 (Simple Songs - Clean Numbered Lists)  
+        **Version**: 2.9 (Clean Recommendations - Track Tables with Album Artwork)  
         **GitHub**: [soyroberto/streamlit](https://github.com/soyroberto/streamlit)  
-        **Status**: Production Ready - Minimal and Fast
+        **Status**: Production Ready - Beautiful Clean Display
         """)
 
 if __name__ == "__main__":
