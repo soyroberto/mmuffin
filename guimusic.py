@@ -673,8 +673,8 @@ def render_sidebar():
     # Number of recommendations - INCREASED TO 50
     num_recs = st.sidebar.slider(
         "📈 Number of Recommendations",
-        min_value=5,
-        max_value=10,  # ✅ INCREASED FROM 100 TO 50 AS REQUESTED
+        min_value=1,
+        max_value=10,  # Increased max value to 10
         value=5,
         help="How many artist recommendations to generate (max 50)"
     )
