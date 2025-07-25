@@ -49,3 +49,4 @@ __pycache__/
 Thumbs.db
 .ipynb_checkpoints/recommendation-checkpoint.ipynb
 .ipynb_checkpoints/Untitled-checkpoint.ipynb
+streamlit_env
