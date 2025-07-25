@@ -1,11 +1,14 @@
 #!/usr/bin/env python3
 """
-🎵 Personal Music Recommendation System - Tier-Filtered Chart Streamlit Web Application
+🎵 Personal Music Recommendation System - Simple Songs List Streamlit Web Application
 
-This is a robust web interface for the hybrid AI/ML music recommendation system.
+This version features clean recommendation formatting with simple numbered song lists.
 Features automatic data loading with proper session state management, tier range visualization with ranks, and tier-filtered chart display.
 
-TIER-FILTERED VERSION:
+SIMPLE SONGS VERSION:
+- Clean artist recommendation display (no images, no tables)
+- Top 5 songs per artist in numbered list format
+- No album references or artwork
 - Chart shows ONLY artists within the selected tier range
 - Artist ranks displayed on the left side of the chart
 - Data overview metrics reflect only the selected tier range
@@ -91,27 +94,47 @@ st.markdown("""
     }
     
     .recommendation-card {
-        background: #f8f9fa;
-        border: 1px solid #e9ecef;
-        border-radius: 8px;
-        padding: 1rem;
-        margin: 0.5rem 0;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        background: linear-gradient(135deg, #f8f9fa 0%, #ffffff 100%);
+        border: 2px solid #1DB954;
+        border-radius: 12px;
+        padding: 1.5rem;
+        margin: 1rem 0;
+        box-shadow: 0 4px 12px rgba(29, 185, 84, 0.15);
     }
     
     .artist-header {
-        font-size: 1.2rem;
+        font-size: 1.4rem;
         font-weight: bold;
         color: #1DB954;
-        margin-bottom: 0.5rem;
+        margin-bottom: 1rem;
+        text-align: center;
+        border-bottom: 2px solid #1DB954;
+        padding-bottom: 0.5rem;
+    }
+    
+    .song-list {
+        background: white;
+        border-radius: 8px;
+        padding: 1rem;
+        margin: 1rem 0;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.1);
     }
     
     .song-item {
-        background: white;
-        border-left: 3px solid #1DB954;
-        padding: 0.5rem;
-        margin: 0.2rem 0;
-        border-radius: 4px;
+        padding: 0.5rem 0;
+        border-bottom: 1px solid #e9ecef;
+        font-size: 1rem;
+        color: #333;
+    }
+    
+    .song-item:last-child {
+        border-bottom: none;
+    }
+    
+    .song-number {
+        font-weight: bold;
+        color: #1DB954;
+        margin-right: 0.5rem;
     }
     
     .recommend-button {
@@ -182,6 +205,17 @@ st.markdown("""
     .stButton > button:hover {
         transform: translateY(-2px);
         box-shadow: 0 4px 8px rgba(29, 185, 84, 0.3);
+    }
+    
+    .recommendation-score {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        padding: 0.3rem 0.8rem;
+        border-radius: 20px;
+        font-size: 0.9rem;
+        font-weight: bold;
+        display: inline-block;
+        margin-left: 1rem;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -280,6 +314,41 @@ def validate_lastfm_api():
         
     except Exception as e:
         return False
+
+def get_top_tracks_simple(artist, api_key, limit=5):
+    """
+    Get top tracks for an artist - SIMPLIFIED VERSION (no images, no albums)
+    Based on the user's working code but returns only song names
+    """
+    try:
+        # Get top tracks using the user's proven API structure
+        url = f"http://ws.audioscrobbler.com/2.0/?method=artist.gettoptracks&artist={artist}&api_key={api_key}&format=json&limit={limit}"
+        response = requests.get(url, timeout=10)
+        
+        if response.status_code != 200:
+            return []
+        
+        data = response.json()
+        
+        if 'toptracks' not in data or 'track' not in data['toptracks']:
+            return []
+        
+        tracks = data['toptracks']['track']
+        if not isinstance(tracks, list):
+            tracks = [tracks]  # Handle single track response
+        
+        # Extract only song names - NO IMAGES, NO ALBUMS
+        top_tracks = []
+        for track in tracks:
+            track_name = track.get('name', 'Unknown Track')
+            if track_name and track_name != 'Unknown Track':
+                top_tracks.append(track_name)
+        
+        return top_tracks[:limit]  # Return only the song names
+        
+    except Exception as e:
+        # Return empty list if API call fails
+        return []
 
 def extract_years_from_filename(filename: str) -> Set[int]:
     """Extract years from Spotify filename formats"""
@@ -526,88 +595,72 @@ def get_artist_songs(artist_name: str, df: pd.DataFrame, min_songs: int = 3, max
         return []
 
 def render_sidebar():
-    """Render the simplified sidebar with fixed tier input validation - UNCHANGED"""
+    """Render the simplified sidebar with tier range slider and precise controls"""
     st.sidebar.markdown("## 🧠 AI/ML Settings")
     
-    # Artist tier selection - FIXED VERSION without dynamic constraints
-    # Use session state to manage values and avoid validation conflicts
-    
-    # Tier Start input - no max constraint to avoid conflicts
-    tier_start = st.sidebar.number_input(
-        "🎯 Artist Tier Start",
+    # Get total unique artists for slider range
+    if st.session_state.artist_rankings is not None:
+        total_artists = len(st.session_state.artist_rankings)
+    else:
+        total_artists = 1  # Fallback
+
+    # Input fields for precise tier start/end
+    col_start1, col_start2, col_start3 = st.sidebar.columns([1, 2, 1])
+    with col_start1:
+        if st.button("-", key="tier_start_minus"):
+            st.session_state.tier_start = max(1, st.session_state.tier_start - 1)
+    with col_start2:
+        tier_start_input = st.number_input(
+            "Tier Start",
+            min_value=1,
+            max_value=total_artists,
+            value=st.session_state.tier_start,
+            step=1,
+            key="tier_start_input"
+        )
+        st.session_state.tier_start = tier_start_input
+    with col_start3:
+        if st.button("+", key="tier_start_plus"):
+            st.session_state.tier_start = min(total_artists, st.session_state.tier_start + 1)
+
+    # Slider for tier range
+    tier_start, tier_end = st.sidebar.slider(
+        "🎯 Artist Tier Range",
         min_value=1,
-        max_value=10000,
-        value=st.session_state.tier_start,
+        max_value=total_artists,
+        value=(st.session_state.tier_start, st.session_state.tier_end),
         step=1,
-        help="Starting rank for artist tier selection",
-        key="tier_start_input"
+        help="Select artist tier range by rank (no repeats)"
     )
-    
-    # Tier End input - no min constraint to avoid conflicts
-    tier_end = st.sidebar.number_input(
-        "🎯 Artist Tier End", 
-        min_value=1,
-        max_value=10000,
-        value=st.session_state.tier_end,
-        step=1,
-        help="Ending rank for artist tier selection",
-        key="tier_end_input"
-    )
-    
-    # Update session state values
     st.session_state.tier_start = tier_start
     st.session_state.tier_end = tier_end
-    
-    # Validate and fix the range if needed
-    if tier_start > tier_end:
-        st.sidebar.markdown("""
-        <div class="status-warning">
-            ⚠️ Start value is greater than end value. Will use start value as both start and end.
-        </div>
-        """, unsafe_allow_html=True)
-        # Auto-fix: use the larger value for both
-        tier_end = tier_start
-        st.session_state.tier_end = tier_end
-    
-    # Show the effective range being used with artist names if available
-    if st.session_state.artist_rankings is not None:
-        rankings = st.session_state.artist_rankings
-        
-        # Get artists in the selected tier range
-        tier_start_actual = min(tier_start, tier_end)
-        tier_end_actual = max(tier_start, tier_end)
-        
-        tier_mask = (
-            (rankings['rank'] >= tier_start_actual) & 
-            (rankings['rank'] <= tier_end_actual)
+
+    # Input fields for precise tier end
+    col_end1, col_end2, col_end3 = st.sidebar.columns([1, 2, 1])
+    with col_end1:
+        if st.button("-", key="tier_end_minus"):
+            st.session_state.tier_end = max(1, st.session_state.tier_end - 1)
+    with col_end2:
+        tier_end_input = st.number_input(
+            "Tier End",
+            min_value=1,
+            max_value=total_artists,
+            value=st.session_state.tier_end,
+            step=1,
+            key="tier_end_input"
         )
-        tier_artists = rankings[tier_mask]
-        
-        if len(tier_artists) > 0:
-            st.sidebar.markdown(f"""
-            <div class="tier-highlight">
-                🎯 <strong>Selected Tier Range: {tier_start_actual} to {tier_end_actual}</strong><br>
-                📊 <strong>{len(tier_artists)} artists</strong> will be used for recommendations<br>
-                🏆 <strong>Top artist:</strong> {tier_artists.iloc[0]['artist']}<br>
-                🎵 <strong>Bottom artist:</strong> {tier_artists.iloc[-1]['artist']}
-            </div>
-            """, unsafe_allow_html=True)
-        else:
-            st.sidebar.warning(f"No artists found in tier range {tier_start_actual}-{tier_end_actual}")
-    else:
-        # Fallback if rankings not available
-        if tier_start != tier_end:
-            st.sidebar.info(f"🎯 Using artist tier range: {tier_start} to {tier_end}")
-        else:
-            st.sidebar.info(f"🎯 Using single artist tier: {tier_start}")
-    
-    # Number of recommendations - INCREASED TO 50
+        st.session_state.tier_end = tier_end_input
+    with col_end3:
+        if st.button("+", key="tier_end_plus"):
+            st.session_state.tier_end = min(total_artists, st.session_state.tier_end + 1)
+
+    max_recs = 10  
     num_recs = st.sidebar.slider(
         "📈 Number of Recommendations",
-        min_value=5,
-        max_value=50,  # ✅ INCREASED FROM 100 TO 50 AS REQUESTED
-        value=20,
-        help="How many artist recommendations to generate (max 50)"
+        min_value=1,
+        max_value=max_recs,
+        value=2,
+        help=f"How many artist recommendations to generate (max: {max_recs})"
     )
     
     # Recommend button
@@ -682,13 +735,13 @@ def render_main_header():
     st.markdown("""
     <div style="text-align: center; margin-bottom: 2rem;">
         <p style="font-size: 1.2rem; color: #666;">
-            Tier-Filtered Version - Chart Shows Only Selected Artists
+            Simple Songs Version - Clean Numbered Lists
         </p>
     </div>
     """, unsafe_allow_html=True)
 
 def create_tier_filtered_chart(df: pd.DataFrame, tier_start: int, tier_end: int):
-    """Create chart showing ONLY artists within the selected tier range"""
+    """Create chart showing ONLY artists within the selected tier range - FIXED ORDERING"""
     try:
         if st.session_state.artist_rankings is None:
             # Fallback to simple chart if rankings not available
@@ -739,7 +792,7 @@ def create_tier_filtered_chart(df: pd.DataFrame, tier_start: int, tier_end: int)
             )
             return fig
         
-        # Sort by rank (ascending) to show in proper order
+        # FIXED: Sort by rank (ascending) to show in proper order from top to bottom
         tier_artists_df = tier_artists_df.sort_values('rank', ascending=True)
         
         # Create artist labels with ranks on the left
@@ -751,9 +804,9 @@ def create_tier_filtered_chart(df: pd.DataFrame, tier_start: int, tier_end: int)
         # Create the filtered bar chart
         fig = go.Figure()
         
-        # Add bars - all green since they're all in the selected tier
+        # FIXED: Add bars showing HOURS (not ranks) with proper ordering
         fig.add_trace(go.Bar(
-            x=tier_artists_df['total_hours'],
+            x=tier_artists_df['total_hours'],  # ✅ FIXED: Show hours, not ranks
             y=artist_labels,
             orientation='h',
             marker=dict(
@@ -802,10 +855,11 @@ def create_tier_filtered_chart(df: pd.DataFrame, tier_start: int, tier_end: int)
                 x=0.5,
                 font=dict(size=16)
             ),
-            xaxis_title="Hours Played",
+            xaxis_title="Hours Played",  # ✅ FIXED: Shows hours, not ranks
             yaxis_title="Artist Rankings",
             height=chart_height,
-            yaxis=dict(categoryorder='total ascending'),
+            # FIXED: Remove categoryorder to maintain rank-based ordering
+            yaxis=dict(categoryorder='array', categoryarray=artist_labels[::-1]),  # ✅ FIXED: Proper ordering
             showlegend=False,
             plot_bgcolor='rgba(0,0,0,0)',
             paper_bgcolor='rgba(0,0,0,0)',
@@ -1088,7 +1142,7 @@ def render_artist_search():
             st.error("Unable to calculate artist rankings")
 
 def generate_recommendations(config):
-    """Generate AI/ML recommendations using auto-loaded API keys"""
+    """Generate AI/ML recommendations using auto-loaded API keys with clean artist names"""
     if not st.session_state.api_validated:
         st.error("❌ Cannot generate recommendations: Last.fm API not connected")
         return
@@ -1158,9 +1212,16 @@ def generate_recommendations(config):
                 try:
                     similar_artists = lastfm_api.get_similar_artists(artist, limit=5)
                     for similar_artist in similar_artists:
-                        if similar_artist not in [a['artist'] for a in recommendations]:
+                        # CLEAN ARTIST NAME: Extract just the name if it's a dict
+                        if isinstance(similar_artist, dict):
+                            artist_name = similar_artist.get('name', str(similar_artist))
+                        else:
+                            artist_name = str(similar_artist)
+                        
+                        # Check if already in recommendations
+                        if artist_name not in [rec['artist'] for rec in recommendations]:
                             recommendations.append({
-                                'artist': similar_artist,
+                                'artist': artist_name,  # Clean artist name only
                                 'recommendation_score': 1.0 - (i * 0.05),  # Slower decay for more variety
                                 'source_artist': artist
                             })
@@ -1170,21 +1231,14 @@ def generate_recommendations(config):
                 except Exception as e:
                     continue
             
-            status_text.text("Adding song information...")
+            status_text.text("Getting top songs (simplified)...")
             progress_bar.progress(0.9)
             
-            # Add songs for each recommended artist
+            # Add simple song lists for each recommended artist
             for rec in recommendations:
-                # Try to get songs from user's library first
-                songs = get_artist_songs(rec['artist'], df)
-                if not songs:
-                    # If not in library, get popular songs from Last.fm
-                    try:
-                        songs = lastfm_api.get_top_tracks(rec['artist'], limit=5)
-                    except:
-                        songs = []
-                
-                rec['songs'] = songs[:5]  # Maximum 5 songs
+                # Get simple song names only (no images, no albums)
+                songs = get_top_tracks_simple(rec['artist'], api_key, limit=5)
+                rec['songs'] = songs  # Just a list of song names
             
             progress_bar.progress(1.0)
             status_text.text("✅ Recommendations generated successfully!")
@@ -1208,7 +1262,7 @@ def generate_recommendations(config):
         st.error("Please check your API configuration and network connection.")
 
 def display_recommendations():
-    """Display the generated recommendations in a beautiful format"""
+    """Display the generated recommendations in a simple format with numbered song lists"""
     recommendations = st.session_state.recommendations
     
     st.markdown("## 🎵 Your AI-Generated Music Recommendations")
@@ -1224,41 +1278,39 @@ def display_recommendations():
         st.warning("No recommendations generated. Please try different settings or check your API configuration.")
         return
     
-    # Display recommendations in cards
+    # Display recommendations in simple cards with numbered song lists
     for i, rec in enumerate(content_recs, 1):
         with st.container():
+            # Artist header with score
             st.markdown(f"""
             <div class="recommendation-card">
                 <div class="artist-header">
-                    #{i}: {rec['artist']} 
-                    <span style="color: #666; font-size: 0.9rem; font-weight: normal;">
-                        (Score: {rec['recommendation_score']:.3f})
-                    </span>
+                    {i}: {rec['artist']}
+                    <span class="recommendation-score">Score: {rec['recommendation_score']:.3f}</span>
                 </div>
             </div>
             """, unsafe_allow_html=True)
             
-            # Display songs
+            # Display songs in a simple numbered list
             songs = rec.get('songs', [])
             if songs:
-                st.markdown("**Popular Songs:**")
+                st.markdown("### 🎵 Top Songs")
                 
-                # Create columns for songs
-                cols = st.columns(min(len(songs), 3))
-                for j, song in enumerate(songs):
-                    col_idx = j % len(cols)
-                    with cols[col_idx]:
-                        st.markdown(f"""
-                        <div class="song-item">
-                            🎵 {song}
-                        </div>
-                        """, unsafe_allow_html=True)
+                # Create simple numbered list HTML
+                song_list_html = '<div class="song-list">'
+                
+                for j, song in enumerate(songs, 1):
+                    song_list_html += f'<div class="song-item"><span class="song-number">{j}.</span>{song}</div>'
+                song_list_html += '</div>'
+                
+                st.markdown(song_list_html, unsafe_allow_html=True)
+                
             else:
-                st.markdown("*No song information available*")
+                st.markdown("*No song information available from Last.fm*")
             
             # Show source artist if available
             if 'source_artist' in rec:
-                st.caption(f"💡 Recommended because you listen to: {rec['source_artist']}")
+                st.caption(f"💡 Recommended because you listen to: **{rec['source_artist']}**")
             
             st.markdown("---")
     
@@ -1288,8 +1340,8 @@ def export_recommendations_json():
         export_data = {
             'export_metadata': {
                 'timestamp': datetime.now().isoformat(),
-                'export_type': 'music_recommendations_tier_filtered',
-                'system_version': '2.8_streamlit_tier_filtered_chart'
+                'export_type': 'music_recommendations_simple_songs',
+                'system_version': '3.0_streamlit_simple_songs'
             },
             'recommendations': st.session_state.recommendations,
             'analysis': st.session_state.analysis_results
@@ -1355,8 +1407,9 @@ def copy_recommendations_to_clipboard():
             text_output += f"{i}. {rec['artist']} (Score: {rec['recommendation_score']:.3f})\n"
             songs = rec.get('songs', [])
             if songs:
-                for song in songs:
-                    text_output += f"   🎵 {song}\n"
+                text_output += "   Top Songs:\n"
+                for j, song in enumerate(songs, 1):
+                    text_output += f"   {j}. {song}\n"
             text_output += "\n"
         
         st.text_area(
@@ -1392,47 +1445,82 @@ def main():
     
     with tab3:
         st.markdown("""
-        ## 🎵 About This System (Tier-Filtered Version)
+        ## 🎵 About This System (Simple Songs Version)
         
-        This is a **Tier-Filtered Hybrid AI/ML Music Recommendation System** with chart showing only selected artists.
+        This is a **Simple Songs Hybrid AI/ML Music Recommendation System** with clean numbered song lists.
         
         ### 🆕 Latest Enhancement
         
-        **Chart Now Shows ONLY Selected Artists**: The middle chart is filtered to display only the artists within your selected tier range, giving you complete clarity on which artists will be used for recommendations.
+        **Simple Song Lists**: Clean and minimal display format:
+        - **No images or album artwork** - removed all visual clutter
+        - **No tables** - simple numbered lists instead
+        - **No album references** - just song names
+        - **Clean formatting** - artist name with numbered songs below
+        - **Minimal design** - focus on the music, not the visuals
         
-        ### 🎯 Key Features
+        ### 🎯 Display Format
         
-        - **Filtered Chart Display**: Chart shows only artists in your selected tier range
-        - **All Green Bars**: Since all displayed artists are selected, all bars are green
-        - **Clear Artist Identification**: See exactly which artists (#1, #2, etc.) will generate recommendations
-        - **Dynamic Chart Height**: Chart adjusts size based on number of selected artists
-        - **Real-Time Filtering**: Chart updates immediately when you change tier range
+        Each recommended artist shows:
+        ```
+        #1: Artist Name                                    Score: 0.950
         
-        ### 📊 What You See
+        🎵 Top Songs
+        1. Song Name One
+        2. Song Name Two  
+        3. Song Name Three
+        4. Song Name Four
+        5. Song Name Five
         
-        **Chart Title**: "🎯 Selected Artists for Recommendations (Tier #X-#Y)"
-        **Chart Content**: Only artists within your selected tier range
-        **All Bars Green**: Every artist shown will be used for recommendations
-        **No Confusion**: No gray bars or non-selected artists displayed
+        💡 Recommended because you listen to: Source Artist
+        ```
         
-        ### 🚀 Everything Else Stays
+        ### ✅ What's Removed
         
-        - **Data Overview**: Metrics still reflect tier-specific data
-        - **Sidebar**: All controls remain exactly the same
-        - **Artist Search**: Full search functionality preserved
-        - **About Section**: Complete documentation maintained
-        - **Recommendations**: Same AI/ML recommendation engine
+        - ❌ **Album artwork and images** - no more loading issues
+        - ❌ **Album names and references** - simplified display
+        - ❌ **Complex tables** - replaced with simple lists
+        - ❌ **Play count columns** - focus on song discovery
+        - ❌ **Visual clutter** - clean, minimal interface
         
-        ### 🎯 Perfect Clarity
+        ### ✅ What's Preserved
         
-        Now when you look at the chart, you see EXACTLY which artists will be used to generate your recommendations. No guesswork, no mixed signals - just the artists you've selected through your tier range.
+        - ✅ **Clean artist names** - no messy JSON output
+        - ✅ **Top 5 songs per artist** - using Last.fm API
+        - ✅ **Numbered lists** - easy to read format
+        - ✅ **Recommendation scores** - AI confidence levels
+        - ✅ **Source attribution** - why each artist was recommended
+        - ✅ **All AI/ML functionality** - same powerful algorithms
+        
+        ### 🎨 Design Philosophy
+        
+        **Minimal and Clean**:
+        - Focus on music discovery, not visual elements
+        - Fast loading with no image dependencies
+        - Simple, readable format that works everywhere
+        - Clean typography with clear hierarchy
+        - Spotify-inspired color scheme maintained
+        
+        ### 🔧 Technical Benefits
+        
+        **Performance**:
+        - Faster loading (no image requests)
+        - Lower bandwidth usage
+        - Better mobile experience
+        - Simplified API calls
+        - Reduced complexity
+        
+        **Reliability**:
+        - No broken image links
+        - No album artwork loading failures
+        - Consistent display across all devices
+        - Simplified error handling
         
         ---
         
         **Created by**: Roberto's AI Music Recommendation System  
-        **Version**: 2.8 (Tier-Filtered - Chart Shows Only Selected Artists)  
+        **Version**: 3.0 (Simple Songs - Clean Numbered Lists)  
         **GitHub**: [soyroberto/streamlit](https://github.com/soyroberto/streamlit)  
-        **Status**: Production Ready - Perfect Tier Clarity
+        **Status**: Production Ready - Minimal and Fast
         """)
 
 if __name__ == "__main__":
