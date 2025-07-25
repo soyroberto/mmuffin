@@ -595,88 +595,72 @@ def get_artist_songs(artist_name: str, df: pd.DataFrame, min_songs: int = 3, max
         return []
 
 def render_sidebar():
-    """Render the simplified sidebar with fixed tier input validation - UNCHANGED"""
+    """Render the simplified sidebar with tier range slider and precise controls"""
     st.sidebar.markdown("## 🧠 AI/ML Settings")
     
-    # Artist tier selection - FIXED VERSION without dynamic constraints
-    # Use session state to manage values and avoid validation conflicts
-    
-    # Tier Start input - no max constraint to avoid conflicts
-    tier_start = st.sidebar.number_input(
-        "🎯 Artist Tier Start",
+    # Get total unique artists for slider range
+    if st.session_state.artist_rankings is not None:
+        total_artists = len(st.session_state.artist_rankings)
+    else:
+        total_artists = 1  # Fallback
+
+    # Input fields for precise tier start/end
+    col_start1, col_start2, col_start3 = st.sidebar.columns([1, 2, 1])
+    with col_start1:
+        if st.button("-", key="tier_start_minus"):
+            st.session_state.tier_start = max(1, st.session_state.tier_start - 1)
+    with col_start2:
+        tier_start_input = st.number_input(
+            "Tier Start",
+            min_value=1,
+            max_value=total_artists,
+            value=st.session_state.tier_start,
+            step=1,
+            key="tier_start_input"
+        )
+        st.session_state.tier_start = tier_start_input
+    with col_start3:
+        if st.button("+", key="tier_start_plus"):
+            st.session_state.tier_start = min(total_artists, st.session_state.tier_start + 1)
+
+    # Slider for tier range
+    tier_start, tier_end = st.sidebar.slider(
+        "🎯 Artist Tier Range",
         min_value=1,
-        max_value=10000,
-        value=st.session_state.tier_start,
+        max_value=total_artists,
+        value=(st.session_state.tier_start, st.session_state.tier_end),
         step=1,
-        help="Starting rank for artist tier selection",
-        key="tier_start_input"
+        help="Select artist tier range by rank (no repeats)"
     )
-    
-    # Tier End input - no min constraint to avoid conflicts
-    tier_end = st.sidebar.number_input(
-        "🎯 Artist Tier End", 
-        min_value=1,
-        max_value=10000,
-        value=st.session_state.tier_end,
-        step=1,
-        help="Ending rank for artist tier selection",
-        key="tier_end_input"
-    )
-    
-    # Update session state values
     st.session_state.tier_start = tier_start
     st.session_state.tier_end = tier_end
-    
-    # Validate and fix the range if needed
-    if tier_start > tier_end:
-        st.sidebar.markdown("""
-        <div class="status-warning">
-            ⚠️ Start value is greater than end value. Will use start value as both start and end.
-        </div>
-        """, unsafe_allow_html=True)
-        # Auto-fix: use the larger value for both
-        tier_end = tier_start
-        st.session_state.tier_end = tier_end
-    
-    # Show the effective range being used with artist names if available
-    if st.session_state.artist_rankings is not None:
-        rankings = st.session_state.artist_rankings
-        
-        # Get artists in the selected tier range
-        tier_start_actual = min(tier_start, tier_end)
-        tier_end_actual = max(tier_start, tier_end)
-        
-        tier_mask = (
-            (rankings['rank'] >= tier_start_actual) & 
-            (rankings['rank'] <= tier_end_actual)
+
+    # Input fields for precise tier end
+    col_end1, col_end2, col_end3 = st.sidebar.columns([1, 2, 1])
+    with col_end1:
+        if st.button("-", key="tier_end_minus"):
+            st.session_state.tier_end = max(1, st.session_state.tier_end - 1)
+    with col_end2:
+        tier_end_input = st.number_input(
+            "Tier End",
+            min_value=1,
+            max_value=total_artists,
+            value=st.session_state.tier_end,
+            step=1,
+            key="tier_end_input"
         )
-        tier_artists = rankings[tier_mask]
-        
-        if len(tier_artists) > 0:
-            st.sidebar.markdown(f"""
-            <div class="tier-highlight">
-                🎯 <strong>Selected Tier Range: {tier_start_actual} to {tier_end_actual}</strong><br>
-                📊 <strong>{len(tier_artists)} artists</strong> will be used for recommendations<br>
-                🏆 <strong>Top artist:</strong> {tier_artists.iloc[0]['artist']}<br>
-                🎵 <strong>Bottom artist:</strong> {tier_artists.iloc[-1]['artist']}
-            </div>
-            """, unsafe_allow_html=True)
-        else:
-            st.sidebar.warning(f"No artists found in tier range {tier_start_actual}-{tier_end_actual}")
-    else:
-        # Fallback if rankings not available
-        if tier_start != tier_end:
-            st.sidebar.info(f"🎯 Using artist tier range: {tier_start} to {tier_end}")
-        else:
-            st.sidebar.info(f"🎯 Using single artist tier: {tier_start}")
-    
-    # Number of recommendations - INCREASED TO 50
+        st.session_state.tier_end = tier_end_input
+    with col_end3:
+        if st.button("+", key="tier_end_plus"):
+            st.session_state.tier_end = min(total_artists, st.session_state.tier_end + 1)
+
+    max_recs = 10  
     num_recs = st.sidebar.slider(
         "📈 Number of Recommendations",
         min_value=1,
-        max_value=10,  # Increased max value to 10
-        value=5,
-        help="How many artist recommendations to generate (max 50)"
+        max_value=max_recs,
+        value=2,
+        help=f"How many artist recommendations to generate (max: {max_recs})"
     )
     
     # Recommend button
