@@ -1,5 +1,5 @@
-# Enhanced Music Recommendation System with Jump Links
-# This version adds jump links to recommendations after "More Like This" is clicked
+# Enhanced Music Recommendation System with Detailed Artist Search
+# This version adds enhanced search results with detailed metrics and expandable song lists
 
 import streamlit as st
 import pandas as pd
@@ -27,7 +27,7 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# CUSTOM CSS FOR ENHANCED STYLING WITH SMOOTH SCROLLING
+# CUSTOM CSS FOR ENHANCED STYLING WITH EXPANDABLE SECTIONS
 st.markdown("""
 <style>
     .main-header {
@@ -119,12 +119,40 @@ st.markdown("""
         margin: 1rem 0;
     }
     
-    .search-result-card {
+    .enhanced-search-result-card {
         background: linear-gradient(135deg, #fff3cd, #ffeaa7);
-        padding: 1rem;
-        border-radius: 10px;
-        margin: 0.5rem 0;
+        padding: 1.5rem;
+        border-radius: 15px;
+        margin: 1rem 0;
         border-left: 4px solid #ffc107;
+        box-shadow: 0 2px 10px rgba(255, 193, 7, 0.2);
+    }
+    
+    .artist-rank-title {
+        font-size: 1.4rem;
+        font-weight: bold;
+        color: #333;
+        margin-bottom: 0.5rem;
+    }
+    
+    .artist-metrics-line {
+        font-size: 1rem;
+        color: #666;
+        margin-bottom: 1rem;
+        display: flex;
+        gap: 2rem;
+        flex-wrap: wrap;
+    }
+    
+    .metric-item {
+        display: flex;
+        align-items: center;
+        gap: 0.3rem;
+    }
+    
+    .metric-value {
+        font-weight: bold;
+        color: #333;
     }
     
     .jump-link {
@@ -157,6 +185,57 @@ st.markdown("""
         background: rgba(0, 123, 255, 0.1);
         border-radius: 10px;
         border: 1px dashed #007bff;
+    }
+    
+    .expand-button {
+        background: linear-gradient(135deg, #6c757d, #5a6268);
+        color: white;
+        border: none;
+        padding: 0.5rem 1rem;
+        border-radius: 20px;
+        cursor: pointer;
+        font-size: 0.9rem;
+        transition: all 0.3s ease;
+        margin-top: 0.5rem;
+    }
+    
+    .expand-button:hover {
+        background: linear-gradient(135deg, #5a6268, #495057);
+        transform: translateY(-1px);
+    }
+    
+    .songs-container {
+        background: #f8f9fa;
+        border-radius: 10px;
+        padding: 1rem;
+        margin-top: 1rem;
+        border: 1px solid #dee2e6;
+        max-height: 300px;
+        overflow-y: auto;
+    }
+    
+    .song-entry {
+        padding: 0.5rem 0;
+        border-bottom: 1px solid #e9ecef;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+    
+    .song-entry:last-child {
+        border-bottom: none;
+    }
+    
+    .song-name {
+        font-weight: 500;
+        color: #333;
+    }
+    
+    .song-stats {
+        font-size: 0.85rem;
+        color: #666;
+        display: flex;
+        gap: 1rem;
     }
     
     /* Smooth scrolling for the entire page */
@@ -224,6 +303,8 @@ def initialize_session_state():
         st.session_state.search_performed = False
     if 'show_jump_link' not in st.session_state:
         st.session_state.show_jump_link = False
+    if 'expanded_artists' not in st.session_state:
+        st.session_state.expanded_artists = set()
 
 # DATA LOADING FUNCTIONS
 @st.cache_data
@@ -344,6 +425,42 @@ def calculate_artist_stats(df: pd.DataFrame) -> pd.DataFrame:
     artist_stats = artist_stats.reset_index()
     
     return artist_stats
+
+def get_artist_songs(artist: str, df: pd.DataFrame) -> List[Dict]:
+    """Get all songs listened to for a specific artist with stats"""
+    if df.empty:
+        return []
+    
+    artist_df = df[df['artist'] == artist].copy()
+    
+    if artist_df.empty:
+        return []
+    
+    # Group by track to get song statistics
+    song_stats = artist_df.groupby('track').agg({
+        'hours_played': 'sum',
+        'engagement_score': 'mean',
+        'timestamp': ['count', 'min', 'max']
+    }).round(3)
+    
+    # Flatten column names
+    song_stats.columns = ['total_hours', 'avg_engagement', 'play_count', 'first_played', 'last_played']
+    
+    # Sort by total hours played (most listened songs first)
+    song_stats = song_stats.sort_values('total_hours', ascending=False)
+    
+    songs = []
+    for track, row in song_stats.iterrows():
+        songs.append({
+            'track': track,
+            'total_hours': row['total_hours'],
+            'play_count': int(row['play_count']),
+            'avg_engagement': row['avg_engagement'],
+            'first_played': row['first_played'].strftime('%Y-%m-%d'),
+            'last_played': row['last_played'].strftime('%Y-%m-%d')
+        })
+    
+    return songs
 
 # API FUNCTIONS
 def validate_api_connectivity():
@@ -727,7 +844,7 @@ def render_data_overview(df: pd.DataFrame, tier_start: int, tier_end: int):
         """, unsafe_allow_html=True)
 
 def render_artist_search(df: pd.DataFrame):
-    """Render artist search functionality with jump links"""
+    """Render enhanced artist search functionality with detailed metrics and expandable song lists"""
     st.markdown("### 🔍 Artist Search")
     
     # Search input
@@ -761,38 +878,92 @@ def render_artist_search(df: pd.DataFrame):
             st.session_state.search_performed = False
             st.session_state.hover_recommendations = []
             st.session_state.show_jump_link = False
+            st.session_state.expanded_artists = set()
             st.rerun()
     
-    # Display search results
+    # Display enhanced search results
     if st.session_state.search_performed and st.session_state.search_results:
         st.markdown(f"**Found {len(st.session_state.search_results)} artists:**")
         
         for result in st.session_state.search_results:
-            col1, col2 = st.columns([3, 1])
+            # Enhanced search result card
+            st.markdown(f"""
+            <div class="enhanced-search-result-card">
+                <div class="artist-rank-title">#{result['rank']}: {result['artist']}</div>
+                <div class="artist-metrics-line">
+                    <div class="metric-item">
+                        <span>🕒</span>
+                        <span class="metric-value">{result['total_hours']:.1f}</span>
+                        <span>hours</span>
+                    </div>
+                    <div class="metric-item">
+                        <span>🎵</span>
+                        <span class="metric-value">{result['play_count']:,}</span>
+                        <span>plays</span>
+                    </div>
+                    <div class="metric-item">
+                        <span>📊</span>
+                        <span class="metric-value">{result['avg_engagement']:.2f}</span>
+                        <span>avg engagement</span>
+                    </div>
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+            
+            # Buttons row
+            col1, col2, col3 = st.columns([2, 2, 1])
             
             with col1:
-                st.markdown(f"""
-                <div class="search-result-card">
-                    <strong>#{result['rank']}: {result['artist']}</strong><br>
-                    🕒 {result['total_hours']:.1f} hours • 🎵 {result['play_count']:,} plays • 
-                    📊 {result['avg_engagement']:.2f} avg engagement
-                </div>
-                """, unsafe_allow_html=True)
-            
-            with col2:
-                # Button with unique key and proper session state handling
+                # More Like This button
                 button_key = f"more_like_{result['artist'].replace(' ', '_').replace('/', '_')}"
                 if st.button(f"🎯 More like this", key=button_key):
                     api_key = os.getenv('LASTFM_API_KEY')
                     if api_key:
-                        # Generate hover recommendations without clearing search results
                         hover_recs = generate_hover_recommendations(result['artist'], api_key, 5)
                         st.session_state.hover_recommendations = hover_recs
                         st.session_state.selected_hover_artist = result['artist']
-                        st.session_state.show_jump_link = True  # Enable jump link
+                        st.session_state.show_jump_link = True
                         st.rerun()
                     else:
                         st.error("❌ Last.fm API key not found")
+            
+            with col2:
+                # Expand/Collapse songs button
+                expand_key = f"expand_{result['artist'].replace(' ', '_').replace('/', '_')}"
+                artist_expanded = result['artist'] in st.session_state.expanded_artists
+                
+                if st.button(f"{'▼' if artist_expanded else '▶'} View Songs ({len(get_artist_songs(result['artist'], df))})", key=expand_key):
+                    if artist_expanded:
+                        st.session_state.expanded_artists.discard(result['artist'])
+                    else:
+                        st.session_state.expanded_artists.add(result['artist'])
+                    st.rerun()
+            
+            # Show songs if expanded
+            if result['artist'] in st.session_state.expanded_artists:
+                songs = get_artist_songs(result['artist'], df)
+                if songs:
+                    st.markdown(f"""
+                    <div class="songs-container">
+                        <h4>🎵 All Songs You've Listened To ({len(songs)} tracks)</h4>
+                    """, unsafe_allow_html=True)
+                    
+                    for i, song in enumerate(songs, 1):
+                        st.markdown(f"""
+                        <div class="song-entry">
+                            <div class="song-name">{i}. {song['track']}</div>
+                            <div class="song-stats">
+                                <span>🕒 {song['total_hours']:.2f}h</span>
+                                <span>🎵 {song['play_count']} plays</span>
+                                <span>📊 {song['avg_engagement']:.2f} eng</span>
+                                <span>📅 {song['first_played']} - {song['last_played']}</span>
+                            </div>
+                        </div>
+                        """, unsafe_allow_html=True)
+                    
+                    st.markdown("</div>", unsafe_allow_html=True)
+                else:
+                    st.markdown("*No songs found for this artist*")
         
         # Show jump link if recommendations were generated
         if st.session_state.show_jump_link and st.session_state.hover_recommendations:
@@ -867,7 +1038,7 @@ def render_more_like_this_buttons(tier_artists_df: pd.DataFrame):
                         hover_recs = generate_hover_recommendations(artist, api_key, 5)
                         st.session_state.hover_recommendations = hover_recs
                         st.session_state.selected_hover_artist = artist
-                        st.session_state.show_jump_link = True  # Enable jump link
+                        st.session_state.show_jump_link = True
                         st.rerun()
                     else:
                         st.error("❌ Last.fm API key not found")
@@ -935,7 +1106,7 @@ def main():
         else:
             st.warning("No artists found in the selected tier range.")
         
-        # Artist Search
+        # Enhanced Artist Search
         render_artist_search(st.session_state.spotify_dataframe)
         
         # Hover Recommendations (with anchor for jumping)
