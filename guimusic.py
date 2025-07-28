@@ -464,9 +464,9 @@ def get_artist_songs(artist: str, df: pd.DataFrame) -> List[Dict]:
 
 # API FUNCTIONS
 def validate_api_connectivity():
-    """Test actual API connectivity"""
-    api_key = os.getenv('LASTFM_API_KEY')
-    user_agent = os.getenv('MUSICBRAINZ_USER_AGENT')
+    """Test actual API connectivity""" #28/7/25 Roberto
+    api_key = os.getenv('LASTFM_API_KEY') or st.secrets.get("LASTFM",{}).get("API_KEY")
+    user_agent = os.getenv('MUSICBRAINZ_USER_AGENT') or st.secrets.get("MUSICBRAINZ",{}).get("USER_AGENT")
     
     status = {'lastfm': False, 'musicbrainz': False}
     
