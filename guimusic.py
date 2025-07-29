@@ -462,27 +462,36 @@ def get_artist_songs(artist: str, df: pd.DataFrame) -> List[Dict]:
     
     return songs
 
+def get_api_credentials():
+    return {
+        'lastfm_api_key': os.getenv('LASTFM_API_KEY') or st.secrets.get("LASTFM",{}).get("API_KEY"),
+        'user_agent': os.getenv('MUSICBRAINZ_USER_AGENT') or st.secrets.get("MUSICBRAINZ",{}).get("USER_AGENT")
+    }
+
 # API FUNCTIONS
 def validate_api_connectivity():
     """Test actual API connectivity""" #28/7/25 Roberto
-    api_key = os.getenv('LASTFM_API_KEY') or st.secrets.get("LASTFM",{}).get("API_KEY")
-    user_agent = os.getenv('MUSICBRAINZ_USER_AGENT') or st.secrets.get("MUSICBRAINZ",{}).get("USER_AGENT")
+    credentials = get_api_credentials()
+    #api_key = os.getenv('LASTFM_API_KEY') or st.secrets.get("LASTFM",{}).get("API_KEY")
+    #user_agent = os.getenv('MUSICBRAINZ_USER_AGENT') or st.secrets.get("MUSICBRAINZ",{}).get("USER_AGENT")
     
     status = {'lastfm': False, 'musicbrainz': False}
-    
-    if api_key:
+    api_key = credentials['lastfm_api_key']    
+    if credentials['lastfm_api_key'] and credentials['user_agent']:
         try:
             # Test Last.fm API with a simple call
             test_url = f"http://ws.audioscrobbler.com/2.0/?method=artist.getinfo&artist=Radiohead&api_key={api_key}&format=json"
             response = requests.get(test_url, timeout=5)
             if response.status_code == 200 and 'artist' in response.json():
                 status['lastfm'] = True
-        except:
-            pass
-    
-    if user_agent:
-        status['musicbrainz'] = True  # Assume valid if provided
-    
+                status['musicbrainz'] = True  # Assume MusicBrainz is valid if user agent is set, it's always valid
+        except Exception as e:
+            st.error(f"Error connecting to Last.fm API: {str(e)}")
+    else:
+        st.error("Last.fm API key is not set. Please check your configuration.")
+        status['musicbrainz'] = bool(credentials['user_agent']) # Assume valid if provided
+    if not status['musicbrainz']:
+        st.warning("MusicBrainz is not connected. Some features may be limited.")
     return status
 
 def get_top_tracks_simple(artist: str, api_key: str, limit: int = 5) -> List[str]:
