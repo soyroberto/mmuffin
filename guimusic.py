@@ -268,9 +268,9 @@ function scrollToElement(elementId) {
 class Config:
     DATA_FOLDER = "data/spotify"
     CACHE_FOLDER = "cache"
-    MAX_RECOMMENDATIONS = 50
+    MAX_RECOMMENDATIONS = 5
     DEFAULT_TIER_START = 1
-    DEFAULT_TIER_END = 50
+    DEFAULT_TIER_END = 25
 
 # SESSION STATE INITIALIZATION
 def initialize_session_state():
@@ -740,23 +740,24 @@ def render_sidebar():
     else:
         st.sidebar.info(f"🎯 Using tier range: {effective_start} to {effective_end}")
     
-    # Number of recommendations
-    num_recs = st.sidebar.slider(
-        "📈 Number of Recommendations",
-        min_value=1,
-        max_value=Config.MAX_RECOMMENDATIONS,
-        value=st.session_state.num_recommendations,
-        key="num_recs_slider"
-    )
-    st.session_state.num_recommendations = num_recs
-    
+    # Number of recommendations # removed Will always be 5 
+
+    # num_recs = st.sidebar.slider(
+    #     "📈 Number of Recommendations",
+    #     min_value=1,
+    #     max_value=Config.MAX_RECOMMENDATIONS,
+    #     value=st.session_state.num_recommendations,
+    #     key="num_recs_slider"
+    # )
+    # st.session_state.num_recommendations = num_recs
+    # # removed """
     # Recommend Button
-    if st.sidebar.button("🎵 Recommend", type="primary", use_container_width=True):
-        if st.session_state.data_loaded and api_status['lastfm']:
-            # Generate recommendations logic would go here
-            st.sidebar.success("🎵 Recommendations generated!")
-        else:
-            st.sidebar.error("❌ Please ensure data is loaded and API is connected")
+    # if st.sidebar.button("🎵 Recommend", type="primary"):
+    #     if st.session_state.data_loaded and api_status['lastfm']:
+    #         # Generate recommendations logic would go here
+    #         st.sidebar.success("🎵 Recommendations generated!")
+    #     else:
+    #         st.sidebar.error("❌ Please ensure data is loaded and API is connected")
     
     # Show tier information if data is loaded
     if st.session_state.data_loaded and st.session_state.spotify_dataframe is not None:
@@ -780,7 +781,7 @@ def render_sidebar():
     return {
         'tier_start': effective_start,
         'tier_end': effective_end,
-        'num_recommendations': num_recs
+        'num_recommendations': Config.MAX_RECOMMENDATIONS # From the Class config
     }
 
 def render_data_overview(df: pd.DataFrame, tier_start: int, tier_end: int):
