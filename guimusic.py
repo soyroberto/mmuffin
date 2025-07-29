@@ -467,14 +467,10 @@ def get_api_credentials():
         'lastfm_api_key': os.getenv('LASTFM_API_KEY') or st.secrets.get("LASTFM",{}).get("API_KEY"),
         'user_agent': os.getenv('MUSICBRAINZ_USER_AGENT') or st.secrets.get("MUSICBRAINZ",{}).get("USER_AGENT")
     }
-
 # API FUNCTIONS
 def validate_api_connectivity():
     """Test actual API connectivity""" #28/7/25 Roberto
     credentials = get_api_credentials()
-    #api_key = os.getenv('LASTFM_API_KEY') or st.secrets.get("LASTFM",{}).get("API_KEY")
-    #user_agent = os.getenv('MUSICBRAINZ_USER_AGENT') or st.secrets.get("MUSICBRAINZ",{}).get("USER_AGENT")
-    
     status = {'lastfm': False, 'musicbrainz': False}
     api_key = credentials['lastfm_api_key']    
     if credentials['lastfm_api_key'] and credentials['user_agent']:
@@ -927,7 +923,6 @@ def render_artist_search(df: pd.DataFrame):
                 # More Like This button
                 button_key = f"more_like_{result['artist'].replace(' ', '_').replace('/', '_')}"
                 if st.button(f"🎯 More like this", key=button_key):
-                    #api_key = os.getenv('LASTFM_API_KEY')
                     api_key = get_api_credentials()['lastfm_api_key']
                     if api_key:
                         hover_recs = generate_hover_recommendations(result['artist'], api_key, 5)
@@ -1044,7 +1039,6 @@ def render_more_like_this_buttons(tier_artists_df: pd.DataFrame):
             with cols[j]:
                 button_key = f"hover_rec_{artist.replace(' ', '_').replace('/', '_')}"
                 if st.button(f"🎯 More like {artist}", key=button_key, use_container_width=True):
-                    #api_key = os.getenv('LASTFM_API_KEY')
                     api_key = get_api_credentials()['lastfm_api_key']
                     if api_key:
                         hover_recs = generate_hover_recommendations(artist, api_key, 5)
