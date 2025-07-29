@@ -927,7 +927,8 @@ def render_artist_search(df: pd.DataFrame):
                 # More Like This button
                 button_key = f"more_like_{result['artist'].replace(' ', '_').replace('/', '_')}"
                 if st.button(f"🎯 More like this", key=button_key):
-                    api_key = os.getenv('LASTFM_API_KEY')
+                    #api_key = os.getenv('LASTFM_API_KEY')
+                    api_key = get_api_credentials()['lastfm_api_key']
                     if api_key:
                         hover_recs = generate_hover_recommendations(result['artist'], api_key, 5)
                         st.session_state.hover_recommendations = hover_recs
@@ -1043,7 +1044,8 @@ def render_more_like_this_buttons(tier_artists_df: pd.DataFrame):
             with cols[j]:
                 button_key = f"hover_rec_{artist.replace(' ', '_').replace('/', '_')}"
                 if st.button(f"🎯 More like {artist}", key=button_key, use_container_width=True):
-                    api_key = os.getenv('LASTFM_API_KEY')
+                    #api_key = os.getenv('LASTFM_API_KEY')
+                    api_key = get_api_credentials()['lastfm_api_key']
                     if api_key:
                         hover_recs = generate_hover_recommendations(artist, api_key, 5)
                         st.session_state.hover_recommendations = hover_recs
