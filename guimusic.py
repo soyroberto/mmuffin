@@ -1125,7 +1125,11 @@ def main():
     with st.expander("ℹ️ About This System"):
         st.markdown("""
         ### 🧠 AI/ML Technology Stack
-        
+        Developed by Roberto = roberto@rober.to
+	All data comes from my Spotify listening history 2012-2023 and includes all the songs and artist 
+	I've ever played there
+	with assistance from Manus 
+	the repo: https://github.com/soyroberto/mmuffin
         This system uses advanced machine learning techniques:
         
         - **Hybrid Collaborative Filtering**: Matrix factorization to find patterns in your listening history
