@@ -1,4 +1,3 @@
-# mmuffin
 # 🎵 Personal Music Recommendation System
 
 A comprehensive, secure music recommendation system that analyzes your Spotify listening history and provides personalized recommendations using machine learning and external music APIs. Built with privacy and security in mind, this system processes your data locally and encrypts all sensitive configuration.
